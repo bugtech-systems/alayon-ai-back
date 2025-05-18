@@ -10,8 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-history
-session_logs
+history/*
+session_logs/*
 *.local
 
 # Editor directories and files
