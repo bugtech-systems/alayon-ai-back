@@ -1,0 +1,18 @@
+[
+    {
+        "name": "Juan Dela Cruz",
+        "designation": "Fire Officer",
+        "department": "Fire Department",
+        "role": "Responder",
+        "contact": "09171234567",
+        "isPrivate": false
+    },
+    {
+        "name": "Maria Santos",
+        "designation": "Barangay Captain",
+        "department": "Barangay Alayon",
+        "role": "Local Official",
+        "contact": "09181234567",
+        "isPrivate": true
+    }
+]

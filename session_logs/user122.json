@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "Hi Whos this?"
+  },
+  {
+    "role": "assistant",
+    "content": " {\n    \"intent\": \"provide_response\",\n    \"action\": \"ask_for_more_data\",\n    \"message\": \"Hello! To better assist you, may I know the location of the incident and a brief description of what happened?\",\n    \"data\": null\n  }"
+  },
+  {
+    "role": "user",
+    "content": "Hi Whos this?"
+  },
+  {
+    "role": "assistant",
+    "content": " {\n    \"intent\": \"provide_response\",\n    \"action\": \"ask_for_more_data\",\n    \"message\": \"Apologies for any confusion, I'm here to assist you. May I kindly ask about the location of the incident and a brief description of what happened? This will help us ensure prompt assistance.\",\n    \"data\": null\n  }"
+  }
+]

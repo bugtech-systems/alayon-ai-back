@@ -1,0 +1,21 @@
+{
+  "name": "alayon-services",
+  "version": "1.0.0",
+  "description": "ALAYON BACKEND SERVICES",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "author": "John Benedict Geli",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^0.3.56",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "langchain": "^0.3.26",
+    "openai": "^4.100.0"
+  }
+}

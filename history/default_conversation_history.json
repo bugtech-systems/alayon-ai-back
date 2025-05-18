@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "I need an ambulance for my father."
+  },
+  {
+    "role": "assistant",
+    "content": "{\"intent\": \"report_incident\", \"action\": \"route_to_department\", \"data\": {\"fields\": {\"type\": \"ambulance\", \"location\": \"Zone 4\"}, \"context\": [], \"person\": {}}, \"summary\": \"Ambulance requested in Zone 4 for user's father.\", \"message\": \"Ambulance report received. Help is on the way.\"}"
+  }
+]

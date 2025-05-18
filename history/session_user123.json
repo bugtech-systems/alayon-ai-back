@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "Hi"
+  },
+  {
+    "role": "assistant",
+    "content": " {\n     \"intent\": \"request_assistance\",\n     \"action\": \"route_to_department\",\n     \"data\": {\n       \"fields\": {\"type\": \"unknown\"},\n       \"context\": [{ \"label\": \"Query\", \"value\": \"Hi\" }],\n       \"selected_contact\": {}\n     },\n     \"summary\": \"Assistance requested. Need more details.\",\n     \"message\": \"Hello! How may I assist you today?\"\n   }"
+  }
+]
