@@ -5,8 +5,8 @@ import os
 import threading
 import time
 from flask import Flask, request, jsonify
-# from langchain_ollama import OllamaLLM
-from langchain_community.llms import ollama
+from langchain_ollama import OllamaLLM
+# from langchain_community.llms import ollama
 
 from langchain_core.prompts import PromptTemplate
 from watchdog.observers import Observer
@@ -53,7 +53,7 @@ def create_llm_from_config():
 
     print("[INFO] Using LLM config:", model_config)
 
-    return ollama.Ollama(
+    return OllamaLLM(
         model=model_name,
         temperature=temperature,
         top_p=top_p
