@@ -1,11 +1,10 @@
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-
-import { Ollama } from "langchain/llms/ollama";
-import { PromptTemplate } from "langchain/prompts";
+import { PromptTemplate } from "@langchain/core/prompts";
 import { ConversationChain } from "langchain/chains";
 import { BufferMemory } from "langchain/memory";
+import { Ollama } from "./ollama.js"; // Custom wrapper
 
 const app = express();
 const port = 3000;
@@ -13,26 +12,31 @@ const port = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-const model = new Ollama({
-    baseUrl: "http://localhost:11434",
-    model: "mistral",
-});
+const model = new Ollama({ model: "mistral" });
 
-const prompt = PromptTemplate.fromTemplate(`
-You are an AI assistant...
+const promptTemplate = PromptTemplate.fromTemplate(`
+You are a helpful AI assistant.
 
 {input}
 `);
 
-const memory = new BufferMemory({ returnMessages: true });
+const memory = new BufferMemory({
+    returnMessages: true,
+    memoryKey: "chat_history",
+});
 
 const chain = new ConversationChain({
-    llm: model,
-    prompt,
+    llm: {
+        call: async ({ input }) => {
+            const response = await model.call(input);
+            return { response };
+        },
+    },
+    prompt: promptTemplate,
     memory,
 });
 
-app.post("/api/test", async (req, res) => {
+app.get("/api/test", async (req, res) => {
     try {
 
         res.json({ result: "Test Working!" });
@@ -53,5 +57,5 @@ app.post("/api/chat", async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    console.log(`Server running on http://localhost:${port}`);
 });
