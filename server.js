@@ -32,6 +32,16 @@ const chain = new ConversationChain({
     memory,
 });
 
+app.post("/api/test", async (req, res) => {
+    try {
+
+        res.json({ result: "Test Working!" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
 app.post("/api/chat", async (req, res) => {
     try {
         const { input } = req.body;
