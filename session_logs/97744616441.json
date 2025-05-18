@@ -1,34 +1,10 @@
 [
   {
     "role": "user",
-    "content": "Car Accident."
-  },
-  {
-    "role": "assistant",
-    "content": " {\n      \"intent\": \"report_incident\",\n      \"action\": \"ask_for_more_data\",\n      \"message\": \"To assist you better, could you please provide your full name and the exact location of the car accident?\",\n      \"data\": {}\n   }"
-  },
-  {
-    "role": "user",
-    "content": "John Benedict Geli. San Isidro Barangay Basud."
-  },
-  {
-    "role": "assistant",
-    "content": " {\n      \"intent\": \"report_incident\",\n      \"action\": \"provide_response\",\n      \"message\": \"Thank you for your report, John Benedict Geli. I have noted that a car accident has occurred in San Isidro Barangay Basud. Your report is being processed and the relevant authorities have been notified.\",\n      \"data\": {\n          \"name\": \"John Benedict Geli\",\n          \"location\": \"San Isidro Barangay Basud\",\n          \"incident_type\": \"car accident\"\n      },\n      \"data_objects\": [\n          {\n              \"name\": \"Juan Dela Cruz\",\n              \"designation\": \"Fire Officer\",\n              \"department\": \"Fire Department\",\n              \"role\": \"Responder\",\n              \"contact\": \"09171234567\"\n          }\n      ]\n   }"
-  },
-  {
-    "role": "user",
-    "content": "Okay"
-  },
-  {
-    "role": "assistant",
-    "content": " {\n      \"intent\": \"report_incident\",\n      \"action\": \"provide_response\",\n      \"message\": \"Thank you for your report, John Benedict Geli. To ensure prompt response, could you please provide a brief description of the car accident incident?\",\n      \"data\": {\n          \"name\": \"John Benedict Geli\",\n          \"location\": \"San Isidro Barangay Basud\",\n          \"incident_type\": \"car accident\"\n      },\n      \"data_objects\": [\n          {\n              \"name\": \"Juan Dela Cruz\",\n              \"designation\": \"Fire Officer\",\n              \"department\": \"Fire Department\",\n              \"role\": \"Responder\",\n              \"contact\": \"09171234567\"\n          }\n      ]\n   }"
-  },
-  {
-    "role": "user",
     "content": "Multiple Casualty. Please Contact barangay officials"
   },
   {
     "role": "assistant",
-    "content": " {\n      \"intent\": \"report_incident\",\n      \"action\": \"provide_response\",\n      \"message\": \"Thank you for informing us about the multiple casualties at the car accident site in San Isidro Barangay Basud, John Benedict Geli. The relevant authorities have been notified and the incident is currently being processed. To ensure a swift response, could you please provide more details about the accident?\",\n      \"data\": {\n          \"name\": \"John Benedict Geli\",\n          \"location\": \"San Isidro Barangay Basud\",\n          \"incident_type\": \"car accident\",\n          \"description\": \"Multiple Casualty\"\n      },\n      \"data_objects\": [\n          {\n              \"name\": \"Juan Dela Cruz\",\n              \"designation\": \"Fire Officer\",\n              \"department\": \"Fire Department\",\n              \"role\": \"Responder\",\n              \"contact\": \"09171234567\"\n          },\n          {\n              \"name\": \"Barangay Official\",\n              \"designation\": \"Barangay Captain\",\n              \"department\": \"Barangay Government Unit\",\n              \"role\": \"Responder\",\n              \"contact\": \"09123456789\"\n          }\n      ]\n   }"
+    "content": " {\n    \"intent\": \"report_incident\",\n    \"action\": \"ask_for_more_data\",\n    \"message\": \"Thank you for reporting a multiple casualty incident. To ensure appropriate response, may I have the following details: Full name and location of the incident?\",\n    \"data\": {\n        \"incident_type\": \"multiple casualty\"\n    }\n}"
   }
 ]
