@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3500;
 
 app.use(cors());
 app.use(bodyParser.json());
