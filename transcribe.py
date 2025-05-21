@@ -14,8 +14,8 @@ words = result['text'].split()
 misspelled = spell.unknown(words)
 for word in misspelled:
     print(f"{word} → {spell.correction(word)}")
-    print(result["text"])
 
 
+print(result["text"])
 
 
