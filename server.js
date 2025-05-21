@@ -77,10 +77,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
     const mp3Path = path.resolve(req.file.path);
     const wavPath = mp3Path + '.wav';
 
-    const pythonScript = path.resolve("../transcriber/transcribe.py");
-    const venvPython = path.resolve("../venv/bin/python");
 
-    const cmd = `${venvPython} ${pythonScript} ${mp3Path}`;
 
 
     try {
@@ -94,7 +91,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
 
         // Run Python Whisper transcription
         const { stdout } = await new Promise((resolve, reject) => {
-            exec(cmd, (err, stdout, stderr) => {
+            exec(`python transcribe.py "${wavPath}"`, (err, stdout, stderr) => {
                 if (err) return reject(stderr);
                 resolve({ stdout });
             });
