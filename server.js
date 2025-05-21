@@ -91,7 +91,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
 
         // Run Python Whisper transcription
         const { stdout } = await new Promise((resolve, reject) => {
-            exec(`python transcribe.py "${wavPath}"`, (err, stdout, stderr) => {
+            exec(`python3 transcribe.py "${wavPath}"`, (err, stdout, stderr) => {
                 if (err) return reject(stderr);
                 resolve({ stdout });
             });
