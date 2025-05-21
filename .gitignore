@@ -24,3 +24,5 @@ session_logs/*
 *.njsproj
 *.sln
 *.sw?
+
+venv
