@@ -1,7 +1,21 @@
-# transcribe.py
-import whisper
+# transcriber/transcribe.py
 import sys
+import whisper
+from spellchecker import SpellChecker
+spell = SpellChecker()
 
-model = whisper.load_model("base")  # use "tiny" for faster results
-result = model.transcribe(sys.argv[1])
-print(result["text"])
+audio_file = sys.argv[1]
+model = whisper.load_model("large")
+result = model.transcribe(audio_file, language="en")
+
+
+
+words = result['text'].split()
+misspelled = spell.unknown(words)
+for word in misspelled:
+    print(f"{word} → {spell.correction(word)}")
+    print(result["text"])
+
+
+
+
