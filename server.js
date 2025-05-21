@@ -83,7 +83,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
     try {
         // Convert MP3 → WAV (mono, 16kHz)
         await new Promise((resolve, reject) => {
-            exec(`ffmpeg -y -i "${mp3Path}" -ar 16000 -ac 1 "${wavPath}"`, (err, stdout, stderr) => {
+            exec(`ffmpeg -y -i "${mp3Path}" -ar 16000 -ac 1 -c:a pcm_s16le "${wavPath}"`, (err, stdout, stderr) => {
                 if (err) return reject(stderr);
                 resolve(stdout);
             });
