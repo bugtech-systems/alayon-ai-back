@@ -1,35 +1,45 @@
-const express = require('express');
+import express from "express";
+import {
+    getResources,
+    getResourceById,
+    getTypes,
+    getResourcesByType,
+    getOptionsByType,
+    createResource,
+    updateResourceById,
+    deleteResource
+} from "../controllers/resourceController.js";
+// import { authenticateJWT } from "../middleware/authMiddleware.js";
+
 const router = express.Router();
-const ResourceTag = require('../models/resourceTag.model');
 
-router.get('/', async (req, res) => {
-    const data = await ResourceTag.find();
-    res.json(data);
-});
+router.get("/",
+    // authenticateJWT,
+    getResources);
+router.get("/types",
+    // authenticateJWT, 
+    getTypes);
+router.get("/type/:type",
+    // authenticateJWT, 
+    getResourcesByType);
+router.get("/options/:resourceType",
+    // authenticateJWT, 
+    getOptionsByType);
 
-router.get('/type/:type', async (req, res) => {
-    const data = await ResourceTag.find({ resourceType: req.params.type });
-    res.json(data);
-});
+router.get("/:id",
+    // authenticateJWT,
+    getResourceById);
 
-router.get('/:id', async (req, res) => {
-    const data = await ResourceTag.findById(req.params.id);
-    res.json(data);
-});
+router.post("/",
+    // authenticateJWT, 
+    createResource);
 
-router.post('/', async (req, res) => {
-    const created = await ResourceTag.create(req.body);
-    res.status(201).json(created);
-});
+router.put("/:id",
+    // authenticateJWT,
+    updateResourceById);
 
-router.put('/:id', async (req, res) => {
-    const updated = await ResourceTag.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-});
+router.delete("/",
+    // authenticateJWT,
+    deleteResource);
 
-router.delete('/:id', async (req, res) => {
-    const deleted = await ResourceTag.findByIdAndDelete(req.params.id);
-    res.json(deleted);
-});
-
-module.exports = router;
+export default router;

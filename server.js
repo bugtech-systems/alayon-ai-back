@@ -12,14 +12,39 @@ import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
+//Routers
+import configRouter from './routes/config.route.js';
+import resourceRouter from './routes/resource.route.js';
+import resourceTagsRouter from './routes/resourceTags.js';
+import touchpointRouter from './routes/touchpoint.route.js';
+import promptRouter from './routes/prompt.route.js';
+
+import mongoose from 'mongoose'
+import connectDB from './services/db.js';
+
+// mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/alayon', {
+//     useNewUrlParser: true,
+//     useUnifiedTopology: true,
+// })
+//     .then(() => console.log('MongoDB connected'))
+//     .catch((err) => console.error('MongoDB connection error:', err))
+
+connectDB();
+
+
 const app = express();
 const port = process.env.PORT || 3500;
 
 app.use(cors());
 app.use(bodyParser.json());
 
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+app.use('/config', express.static('config'))
+
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
 
@@ -48,6 +73,12 @@ const chain = new ConversationChain({
     memory,
 });
 
+app.use("/api/config", configRouter);
+app.use("/api/resources", resourceRouter);
+app.use("/api/resource-tags", resourceTagsRouter);
+app.use("/api/touchpoints", touchpointRouter);
+app.use("/api/prompt", promptRouter);
+
 app.get("/api/test", async (req, res) => {
     try {
 
@@ -56,7 +87,6 @@ app.get("/api/test", async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-
 
 app.post("/api/chat", async (req, res) => {
     try {

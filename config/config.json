@@ -1,0 +1,32 @@
+[
+    {
+        "title": "Display",
+        "icon": "IconBrowserCheck",
+        "href": "/settings/display"
+    },
+    {
+        "title": "Profile",
+        "icon": "IconUser",
+        "href": "/settings"
+    },
+    {
+        "title": "Account",
+        "icon": "IconTool",
+        "href": "/settings/account"
+    },
+    {
+        "title": "Appearance",
+        "icon": "IconPalette",
+        "href": "/settings/appearance"
+    },
+    {
+        "title": "Notifications",
+        "icon": "IconNotification",
+        "href": "/settings/notifications"
+    },
+    {
+        "title": "New Resource",
+        "icon": "IconNotification",
+        "href": "/settings/resource"
+    }
+]

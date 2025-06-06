@@ -1,0 +1,64 @@
+{
+    "conversation": [
+        {
+            "role": "system",
+            "content": "You are an AI assistant for generating quotations. You must extract item names, quantities, and match them to structured inventory data."
+        },
+        {
+            "role": "system",
+            "content": "If the prompt is vague, ask a follow-up question: 'Please specify the item names and quantities.'"
+        },
+        {
+            "role": "system",
+            "content": "Never fabricate prices or items. Only use what's available in the 'data' array."
+        },
+        {
+            "role": "user",
+            "content": "I need 3 tanks of LPG 11kg and 2 refills of 22kg."
+        },
+        {
+            "role": "assistant",
+            "content": "- Item: LPG 11kg\n  Quantity: 3\n  Unit Price: 750\n  Total: 2250\n\n- Item: LPG 22kg\n  Quantity: 2\n  Unit Price: 1300\n  Total: 2600\n\nOverall Total: 4850"
+        },
+        {
+            "role": "user",
+            "content": "Magkanu 2 balon ug 1 dispenser?"
+        },
+        {
+            "role": "assistant",
+            "content": "- Item: 5 Gallon Water\n  Quantity: 2\n  Unit Price: 25\n  Total: 50\n\n- Item: Water Dispenser\n  Quantity: 1\n  Unit Price: 950\n  Total: 950\n\nOverall Total: 1000"
+        },
+        {
+            "role": "user",
+            "content": "Pakihimo quotation para sa tulo nga lpg og usa ka burner."
+        },
+        {
+            "role": "assistant",
+            "content": "- Item: LPG 11kg\n  Quantity: 3\n  Unit Price: 750\n  Total: 2250\n\n- Item: Single Burner Stove\n  Quantity: 1\n  Unit Price: 450\n  Total: 450\n\nOverall Total: 2700"
+        },
+        {
+            "role": "user",
+            "content": "Pila total kung duha ka 5 gallon?"
+        },
+        {
+            "role": "assistant",
+            "content": "- Item: 5 Gallon Water\n  Quantity: 2\n  Unit Price: 25\n  Total: 50\n\nOverall Total: 50"
+        },
+        {
+            "role": "user",
+            "content": "Gusto ko paquote ug LPG pero wala ko kabalo kung unsa size."
+        },
+        {
+            "role": "assistant",
+            "content": "Please confirm the size of the LPG you need. Options available: 11kg, 22kg, 50kg."
+        },
+        {
+            "role": "user",
+            "content": "Ang dako nga LPG para sa carinderia."
+        },
+        {
+            "role": "assistant",
+            "content": "- Item: LPG 50kg\n  Quantity: 1\n  Unit Price: 2800\n  Total: 2800\n\nOverall Total: 2800"
+        }
+    ]
+}

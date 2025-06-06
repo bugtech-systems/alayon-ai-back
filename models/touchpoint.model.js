@@ -1,10 +1,28 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
-const touchpointSchema = new mongoose.Schema({
-    action: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
-    resourceId: { type: mongoose.Schema.Types.ObjectId, ref: 'ResourceTag', required: true },
-    notes: { type: String }
-}, { timestamps: true });
+const ValueSchema = new mongoose.Schema(
+    {
+        fieldName: { type: String, required: true },
+        value: mongoose.Schema.Types.Mixed
+    },
+    { _id: false }
+);
 
-module.exports = mongoose.model('Touchpoint', touchpointSchema);
+const touchpointSchema = new mongoose.Schema(
+    {
+        action: { type: String, required: true }, // created, updated, deleted
+        timestamp: { type: Date, default: Date.now },
+        values: [ValueSchema],
+        notes: { type: String },
+
+        resourceId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "ResourceTag",
+            required: true
+        }
+    },
+    { timestamps: true }
+);
+
+export const Touchpoint =
+    mongoose.models.Touchpoint || mongoose.model("Touchpoint", touchpointSchema);
