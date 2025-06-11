@@ -1,23 +1,23 @@
 import { ResourceTag } from "../models/resourceTag.model.js";
 
 export const getResourceConfig = async (req, res) => {
-    const { type = "", name = "config" } = req.query;
-    const query = {};
+    const { type } = req.params;
+    const query = {
+        type: 'config'
+    };
 
     if (type) {
-        query.resourceType = { $regex: new RegExp(`^${type}$`, "i") };
+        query.name = { $regex: new RegExp(`^${type}$`, "i") };
     }
 
-    if (name && type !== "Navs") {
-        query.name = name;
-    }
+
 
     console.log("[GET] /resource-config → Query:", query);
 
     try {
         const config = await ResourceTag.find(query).lean();
         console.log("[GET] /resource-config → Found:", config.length);
-        res.json(config || []);
+        res.json({ success: true, data: config });
     } catch (err) {
         console.error("[GET] /resource-config → Error:", err.stack);
         res.status(500).json({ error: "Failed to fetch resource configs" });
@@ -25,11 +25,11 @@ export const getResourceConfig = async (req, res) => {
 };
 
 export const upsertResourceConfigFields = async (req, res) => {
-    const { resourceType, resourceName, fields } = req.body;
+    const { name, fields } = req.body;
 
     console.log("[POST] /resource-config → Body:", req.body);
 
-    if (!resourceType || !resourceName) {
+    if (!name) {
         return res.status(400).json({
             error: "resourceType and resourceName are required",
         });
@@ -37,10 +37,10 @@ export const upsertResourceConfigFields = async (req, res) => {
 
     try {
         const updated = await ResourceTag.findOneAndUpdate(
-            { resourceType, name: resourceName },
+            { type: 'config', name },
             {
-                resourceType,
-                name: resourceName,
+                type: 'config',
+                name,
                 fields: Array.isArray(fields) ? fields : [],
             },
             {
@@ -51,7 +51,7 @@ export const upsertResourceConfigFields = async (req, res) => {
         );
 
         console.log("[POST] /resource-config → Upserted:", updated._id);
-        res.json({ success: true, config: updated });
+        res.json({ success: true, data: updated });
     } catch (err) {
         console.error("[POST] /resource-config → Error:", err.stack);
         res.status(500).json({ error: "Failed to save resource config" });

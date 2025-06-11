@@ -18,6 +18,8 @@ import resourceRouter from './routes/resource.route.js';
 import resourceTagsRouter from './routes/resourceTags.js';
 import touchpointRouter from './routes/touchpoint.route.js';
 import promptRouter from './routes/prompt.route.js';
+import resourcetagRouter from './routes/resource-tag.route.js';
+import { resourceParent } from "./middlewares/resourceParent.js";
 
 import mongoose from 'mongoose'
 import connectDB from './services/db.js';
@@ -37,6 +39,7 @@ const port = process.env.PORT || 3500;
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use(resourceParent);
 
 
 
@@ -78,6 +81,12 @@ app.use("/api/resources", resourceRouter);
 app.use("/api/resource-tags", resourceTagsRouter);
 app.use("/api/touchpoints", touchpointRouter);
 app.use("/api/prompt", promptRouter);
+
+//V1
+app.use("/api/v1", resourcetagRouter);
+
+
+
 
 app.get("/api/test", async (req, res) => {
     try {

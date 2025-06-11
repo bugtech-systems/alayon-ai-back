@@ -1,18 +1,28 @@
+// routes/resourceRoutes.js
 import express from 'express';
 import {
-    createResource,
-    getResourcesByType,
     getResourceWithRelationships,
+    createResource,
     updateResource,
-    deleteResource
+    deleteResource,
+    listResources
 } from '../controllers/resourceTagController.js';
 
 const router = express.Router();
 
+// List all resources
+router.get('/', listResources);
+
+// Create a new resource
 router.post('/', createResource);
-router.get('/:resourceType', getResourcesByType);
-router.get('/detail/:id', getResourceWithRelationships);
+
+// Get a single resource with populated fields & relationships
+router.get('/:id', getResourceWithRelationships);
+
+// Update a resource
 router.put('/:id', updateResource);
+
+// Delete a resource
 router.delete('/:id', deleteResource);
 
 export default router;

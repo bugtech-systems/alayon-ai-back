@@ -29,7 +29,11 @@ const resourceTagSchema = new mongoose.Schema({
     fields: [FieldSchema],
     values: [ValueSchema],
     relationships: [RelationshipSchema],
-    resourceParent: { type: String, default: null }
+    resourceParent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ResourceTag",
+        required: false
+    }
 }, { timestamps: true });
 
 export const ResourceTag = mongoose.models.ResourceTag || mongoose.model("ResourceTag", resourceTagSchema);

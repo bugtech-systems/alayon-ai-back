@@ -7,7 +7,7 @@ import {
 
 const router = express.Router();
 
-router.get("/", getResourceConfig);
+router.get("/:type", getResourceConfig);
 router.post("/", upsertResourceConfigFields);
 router.put("/:id", updateResourceConfigById); // PUT /resource-config/:id
 
