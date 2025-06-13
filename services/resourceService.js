@@ -6,17 +6,17 @@ export async function getFilteredResources(resourceType, filters = {}) {
     const query = {
         $and: [
             {
-                resourceType: { $regex: new RegExp(resourceType, 'i') } // partial, case-insensitive
+                name: { $regex: new RegExp(resourceType, 'i') } // partial, case-insensitive
             },
             {
-                name: { $ne: 'config' } // exclude 'config'
+                type: { $ne: 'config' } // exclude 'config'
             }
         ]
     };
 
-    let conf = await ResourceTag.findOne({ resourceType, name: 'config' });
+    let conf = await ResourceTag.findOne({ name: resourceType, type: 'config' });
 
-
+    console.log(conf, 'CONF')
     // Add filter for each key-value pair
     for (const [key, value] of Object.entries(filters)) {
         let fExist = false;
@@ -38,6 +38,8 @@ export async function getFilteredResources(resourceType, filters = {}) {
     try {
         const matchedResources = await ResourceTag.find(query).lean();
 
+
+        console.log(matchedResources, 'MMMM')
         const filtered = matchedResources.map(doc => {
             const resourceObj = {};
             resourceObj['name'] = doc.name;

@@ -91,7 +91,7 @@ export const handleAnalyzePrompt = async (req, res) => {
     try {
         let data = [];
         const result = await analyzePrompt({ user_prompt: prompt, sessionId });
-
+        console.log(result, 'RESS')
         if (result.success) {
             let { resourceType, filters } = result;
             data = await getFilteredResources(resourceType, filters)

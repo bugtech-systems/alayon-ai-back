@@ -44,13 +44,13 @@ export const analyzePrompt = async (payload) => {
         const DEFAULT_PROMPTS = await fs.readFile(default_prompts, 'utf-8');
 
         // Get all resourceTypes with name: "config"
-        const resourceConfigs = await ResourceTag.find({ name: 'config' }).lean();
-        const aiPresets = await ResourceTag.find({ resourceType: 'ai_preset', name: { $ne: 'config' } }).lean();
+        const resourceConfigs = await ResourceTag.find({ type: 'config' }).lean();
+        const aiPresets = await ResourceTag.find({ name: 'ai_preset', type: { $ne: 'config' } }).lean();
 
 
         // Extract unique resourceTypes and structure fields
         const resourceTypes = resourceConfigs.map(config => ({
-            resourceType: config.resourceType,
+            name: config.name,
             fields: config.fields?.map(v => v.fieldName) || []
         }));
 
