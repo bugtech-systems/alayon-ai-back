@@ -20,7 +20,7 @@ export const getResourceWithRelationships = async (req, res) => {
         const output = {
             _id: doc._id,
             name: doc.name,
-            resourceType: doc.resourceType,
+            type: doc.type,
             resourceParent: doc.resourceParent,
         };
 
@@ -48,7 +48,7 @@ export const getResourceWithRelationships = async (req, res) => {
                     output[val.fieldName] = refs.map(r => ({
                         _id: r._id,
                         name: r.name,
-                        resourceType: r.resourceType,
+                        type: r.type,
                     }));
                 } else {
                     const ref = await ResourceTag.findOne(refQuery).lean();
@@ -56,7 +56,7 @@ export const getResourceWithRelationships = async (req, res) => {
                         ? {
                             _id: ref._id,
                             name: ref.name,
-                            resourceType: ref.resourceType,
+                            type: ref.type,
                         }
                         : null;
                 }
@@ -91,7 +91,7 @@ export const getResourceWithRelationships = async (req, res) => {
             const summary = {
                 _id: relatedDoc._id,
                 name: relatedDoc.name,
-                resourceType: relatedDoc.resourceType,
+                type: relatedDoc.type,
             };
 
             if (!relGroups[rel.type]) {
@@ -108,7 +108,7 @@ export const getResourceWithRelationships = async (req, res) => {
 
         // Populate "Connection" resources that connect from this resource
         const connectionQuery = {
-            resourceType: 'Connection',
+            type: 'connections',
             'relationships.refId': doc._id,
         };
 
@@ -118,7 +118,7 @@ export const getResourceWithRelationships = async (req, res) => {
         }
 
         const connections = await ResourceTag.find(connectionQuery).lean();
-
+        console.log(connections, 'conns', doc)
         for (const conn of connections) {
             const otherRels = conn.relationships.filter(r =>
                 r.refId.toString() !== doc._id.toString()
@@ -139,7 +139,7 @@ export const getResourceWithRelationships = async (req, res) => {
                 const summary = {
                     _id: connectedResource._id,
                     name: connectedResource.name,
-                    resourceType: connectedResource.resourceType,
+                    type: connectedResource.type,
                 };
 
                 if (output[key]) {

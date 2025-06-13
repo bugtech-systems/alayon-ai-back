@@ -5,6 +5,7 @@ const FieldSchema = new mongoose.Schema({
     fieldName: { type: String, required: true },
     dataType: { type: String, required: true },
     description: { type: String },
+    optionsResourceType: { type: String },
     required: { type: Boolean, default: false }
 }, { _id: false });
 

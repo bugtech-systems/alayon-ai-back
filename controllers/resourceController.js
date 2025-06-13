@@ -114,8 +114,8 @@ export const getResourcesByType = async (req, res) => {
 export const getOptionsByType = async (req, res) => {
     const { resourceType } = req.params;
     const query = {
-        resourceType,
-        name: { $ne: "config" },
+        type: { $ne: "config" },
+        name: resourceType,
     };
 
     // Add resourceParent filter if exists in request

@@ -26,16 +26,16 @@ export const handlePrompt = async (req, res) => {
             resourceType: "PromptLog",
             name: sessionId,
             values: [
-                { field: "prompt", value: prompt },
-                { field: "response", value: result.message },
-                { field: "intent", value: result.intent },
-                { field: "timestamp", value: new Date().toISOString() }
+                { fieldName: "prompt", value: prompt },
+                { fieldName: "response", value: result.message },
+                { fieldName: "intent", value: result.intent },
+                { fieldName: "timestamp", value: new Date().toISOString() }
             ]
         };
 
         console.log("[handlePrompt] Logging prompt to database:", JSON.stringify(logEntry, null, 2));
 
-        await ResourceTag.create(logEntry);
+        // await ResourceTag.create(logEntry);
 
         res.json({ sessionId, ...result });
     } catch (err) {

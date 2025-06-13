@@ -388,9 +388,16 @@ export const getResourceTag = async (req, res) => {
 // Update a ResourceTag
 export const updateResourceTag = async (req, res) => {
     try {
+        let { attributes } = req.body;
+
+        const values = Object.entries(attributes || {}).map(([fieldName, value]) => ({
+            fieldName,
+            value
+        }));
+
         const resourceTag = await ResourceTag.findByIdAndUpdate(
             req.params.id,
-            req.body,
+            { ...req.body, values },
             { new: true, runValidators: true }
         )
             .populate('resourceParent')

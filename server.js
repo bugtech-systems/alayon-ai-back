@@ -19,6 +19,8 @@ import resourceTagsRouter from './routes/resourceTags.js';
 import touchpointRouter from './routes/touchpoint.route.js';
 import promptRouter from './routes/prompt.route.js';
 import resourcetagRouter from './routes/resource-tag.route.js';
+import dynamicChatRouter from './routes/dynamic-chat.route.js';
+
 import { resourceParent } from "./middlewares/resourceParent.js";
 
 import mongoose from 'mongoose'
@@ -84,6 +86,7 @@ app.use("/api/prompt", promptRouter);
 
 //V1
 app.use("/api/v1", resourcetagRouter);
+app.use("/api/v1/chat", dynamicChatRouter);
 
 
 

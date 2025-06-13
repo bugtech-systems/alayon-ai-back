@@ -39,11 +39,14 @@ const buildSystemPrompt = async (session) => {
 Respond with short, casual questions or confirmations based on the user’s current step.
 NEVER explain your answers. Use short, clear messages only.`;
 
-    const organizations = await ResourceTag.find({ resourceType: { $regex: /^organizations$/i } }).lean();
-    const orgList = organizations.map((o) => o.name).join(', ') || 'None';
-    const resourceTypes = await ResourceTag.distinct('resourceType');
+    const organizations = await ResourceTag.find({ name: { $regex: /^organizations$/i } }).lean();
+    const orgList = organizations.map((o) => o.values.filter(a => a.fieldName == 'name')[0]?.value).join(', ') || 'None';
+    const resourceTypes = await ResourceTag.distinct('name');
     const typeList = resourceTypes.filter(t => t.toLowerCase() !== 'organizations').join(', ') || 'None';
 
+
+
+    console.log(organizations, 'ORGS', orgList)
     if (!session.organization) {
 
         return `${basePrompt}\nAvailable organizations: ${orgList}.`
@@ -53,14 +56,14 @@ NEVER explain your answers. Use short, clear messages only.`;
         return `${basePrompt}\nAvailable resource types: ${typeList}.`;
     } else {
         const resourceType = await ResourceTag.findOne({
-            resourceType: { $regex: new RegExp(session.resourceType, 'i') }, // partial, case-insensitive
+            name: { $regex: new RegExp(session.resourceType, 'i') }, // partial, case-insensitive
         });
 
         for (let field of resourceType.fields) {
             if (field.dataType == 'select') {
                 let options = await ResourceTag.find({
-                    resourceType: { $regex: new RegExp(field.fieldName, 'i') }, // partial, case-insensitive
-                    name: { $ne: 'config' }
+                    name: { $regex: new RegExp(field.fieldName, 'i') }, // partial, case-insensitive
+                    type: { $ne: 'config' }
                 }, { name: 1, values: 1 });
                 session.resourceOptions[field.fieldName] = options.map(a => { return a?.values.find(ab => ab.fieldName == 'value').value });
             }
@@ -101,13 +104,13 @@ export const chatPrompt = async (req, res) => {
 
         // Step 2: Auto-match inputs
         if (!session.organization) {
-            const orgs = await ResourceTag.find({ resourceType: { $regex: /^organizations$/i } }).lean();
+            const orgs = await ResourceTag.find({ name: { $regex: /^organizations$/i } }).lean();
             const match = orgs.find(o => lower.includes(o.name.toLowerCase()));
             if (match) session.organization = match.name;
         }
 
         if (!session.resourceType) {
-            const types = await ResourceTag.distinct('resourceType');
+            const types = await ResourceTag.distinct('name');
             const match = types.find(t => lower.includes(t.toLowerCase()) && t.toLowerCase() !== 'organizations');
             if (match) session.resourceType = match;
         }
@@ -119,7 +122,7 @@ export const chatPrompt = async (req, res) => {
 
         // Step 3: Load fields from schema if needed
         if (session.resourceType && session.resourceFields.length === 0) {
-            const typeDef = await ResourceTag.findOne({ resourceType: session.resourceType }).lean();
+            const typeDef = await ResourceTag.findOne({ name: session.resourceType }).lean();
             if (typeDef?.fields) {
                 session.resourceFields = typeDef.fields.map(f => f.fieldName);
             }
@@ -185,9 +188,9 @@ export const chatPrompt = async (req, res) => {
 
         // Step 6: Return structured result
         const query = session.resourceIntent === 'create'
-            ? { resourceType: session.resourceType, values: session.resourceValues }
+            ? { name: session.resourceType, values: session.resourceValues }
             : session.resourceIntent === 'view'
-                ? { resourceType: session.resourceType, search: session.query }
+                ? { name: session.resourceType, search: session.query }
                 : {};
 
 
