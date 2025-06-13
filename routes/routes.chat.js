@@ -45,6 +45,97 @@ Collect all necessary information like organization, resourceType, fields, and v
 Respond casually and guide the user step-by-step.`;
 };
 
+
+
+
+/**
+ * @swagger
+ * /chat:
+ *   post:
+ *     summary: Chat with AI Assistant
+ *     description: Sends a message to the AI assistant and receives a response. Manages conversation state across multiple steps.
+ *     tags: [Chat]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionId
+ *               - message
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *                 example: "abc123"
+ *               message:
+ *                 type: string
+ *                 example: "I want to create a new product"
+ *     responses:
+ *       200:
+ *         description: AI response and updated session context
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 reply:
+ *                   type: string
+ *                   description: AI's response message
+ *                 followUp:
+ *                   type: string
+ *                   description: Next prompt based on the conversation flow
+ *                 session:
+ *                   type: object
+ *                   properties:
+ *                     sessionId:
+ *                       type: string
+ *                     organization:
+ *                       type: string
+ *                     resourceType:
+ *                       type: string
+ *                     resourceFields:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     resourceValues:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: string
+ *                     step:
+ *                       type: string
+ *                     history:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           role:
+ *                             type: string
+ *                             enum: [user, assistant, system]
+ *                           content:
+ *                             type: string
+ *       400:
+ *         description: Missing sessionId or message
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "sessionId and message are required."
+ *       500:
+ *         description: AI processing failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "AI processing failed."
+ */
+
 router.post('/chat', async (req, res) => {
     const { sessionId, message } = req.body;
 
