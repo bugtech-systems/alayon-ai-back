@@ -24,7 +24,7 @@ from backend.utils import get_closest_prompt
 # Config and Constants
 # ----------------------------------
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/chat")
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://127.0.0.1:11434/api/chat")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", 60))
 SYSTEM_DEFAULTS_PATH = os.getenv("SYSTEM_DEFAULTS_PATH", "system_defaults.json")
 DEFAULT_PROMPTS_PATH = os.getenv("DEFAULT_PROMPTS_PATH", "default_prompts.json")
@@ -54,7 +54,7 @@ app.add_middleware(
 # MongoDB Connection
 # ----------------------------------
 client = MongoClient(MONGO_URI)
-db = client["alayon"]
+db = client["alayon_resources"]
 resources_col = db["resourcetags"]
 
 # ----------------------------------

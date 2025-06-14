@@ -25,8 +25,8 @@ import { resourceParent } from "./middlewares/resourceParent.js";
 
 import connectDB from './services/db.js';
 
-import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./docs/swagger.js";
+// import swaggerUi from "swagger-ui-express";
+// import swaggerSpec from "./docs/swagger.js";
 
 // mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/alayon', {
 //     useNewUrlParser: true,
@@ -63,7 +63,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 app.use('/config', express.static('config'))
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
