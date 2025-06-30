@@ -1,0 +1,9 @@
+# Use this EXACT model name (verified working)
+FROM mistral:7b-instruct-v0.2-q4_K_M
+
+SYSTEM """You are a MongoDB expert assistant that returns JSON output"""
+
+# Required parameters for current Ollama:
+ADAPTER ./train_data.jsonl
+
+TEMPLATE """[INST] {{ .Prompt }} [/INST] {{ .Response }}"""

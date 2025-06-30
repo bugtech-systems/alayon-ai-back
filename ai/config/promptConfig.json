@@ -1,0 +1,331 @@
+{
+    "promptInstructions": {
+        "description": "Generate MongoDB queries for ResourceTag operations based on user prompts. Strictly follow the schema and provide structured responses, provided detailed followup message for missing fields. Examples Response is used as format reference, Do not copy values.",
+        "schemaConstraints": {
+            "resourceType": [
+                "resource",
+                "config",
+                "connections"
+            ],
+            "values": {
+                "structure": "Array of {fieldName: string, value: mixed, resource: ObjectId}",
+                "required": true
+            },
+            "relationships": {
+                "structure": "Array of {type: string, refType: 'ResourceTag', refId: ObjectId}",
+                "required": false
+            }
+        },
+        "configSchemaConstraints": {
+            "resourceType": [
+                "resource",
+                "config",
+                "connections"
+            ],
+            "fields": {
+                "fields": {
+                    "structure": "Array of {fieldName: string, dataType: ['resource','config','connections'], description: string, options: [array of options], required: false}",
+                    "required": true
+                }
+            }
+        },
+        "responseFormat": {
+            "requiredFields": [
+                "intent",
+                "resourceName",
+                "resourceType",
+                "data",
+                "query",
+                "confirm",
+                "followup"
+            ],
+            "fieldDescriptions": {
+                "intent": "One of: 'create','update','delete','find'",
+                "resourceName": "Name from prompt or suggested default",
+                "resourceType": "Must match schema enum values",
+                "data": "Extracted data object following schema",
+                "query": "Complete MongoDB query with proper operators",
+                "confirm": "Boolean whether action requires confirmation",
+                "followup": "Detailed next question about missing data"
+            }
+        }
+    },
+    "examples": {
+        "config": [
+            {
+                "userPrompt": "Create a new config resource named 'email_settings' with SMTP host 'smtp.example.com'",
+                "response": {
+                    "intent": "create",
+                    "resourceName": "email_settings",
+                    "resourceType": "config",
+                    "data": {
+                        "type": "config",
+                        "name": "email_settings",
+                        "fields": [
+                            {
+                                "fieldName": "smtp_host",
+                                "dataType": "string"
+                            }
+                        ]
+                    },
+                    "query": {
+                        "operator": "insertOne",
+                        "document": {
+                            "type": "config",
+                            "name": "email_settings",
+                            "fields": [
+                                {
+                                    "fieldName": "smtp_host",
+                                    "dataType": "string"
+                                }
+                            ],
+                            "isDeleted": false,
+                            "createdAt": "$$NOW",
+                            "updatedAt": "$$NOW"
+                        }
+                    },
+                    "confirm": true,
+                    "followup": "I'll create a 'config' resource named 'email_settings' with SMTP host. Do you want me to proceed?"
+                }
+            },
+            {
+                "userPrompt": "Okay proceed.",
+                "response": {
+                    "intent": "create",
+                    "resourceName": "email_settings",
+                    "resourceType": "config",
+                    "data": {
+                        "type": "config",
+                        "name": "email_settings",
+                        "fields": [
+                            {
+                                "fieldName": "smtp_host",
+                                "dataType": "string"
+                            }
+                        ]
+                    },
+                    "query": {
+                        "operator": "create",
+                        "document": {
+                            "type": "config",
+                            "name": "email_settings",
+                            "fields": [
+                                {
+                                    "fieldName": "smtp_host",
+                                    "dataType": "string"
+                                }
+                            ],
+                            "isDeleted": false,
+                            "createdAt": "$$NOW",
+                            "updatedAt": "$$NOW"
+                        }
+                    },
+                    "confirm": true,
+                    "followup": "Created Successfully!"
+                }
+            },
+            {
+                "userPrompt": "Find all resource connections related to user ID 12345",
+                "response": {
+                    "intent": "read",
+                    "resourceName": "",
+                    "resourceType": "connections",
+                    "data": {
+                        "relationships": {
+                            "refId": "12345"
+                        }
+                    },
+                    "query": {
+                        "operator": "find",
+                        "type": "connections",
+                        "relationships": {
+                            "$elemMatch": {
+                                "refId": "ObjectId"
+                            }
+                        },
+                        "isDeleted": false
+                    },
+                    "confirm": false,
+                    "followup": "Should I also check for specific connection types, or just all connections referencing this user?"
+                }
+            }
+        ],
+        "resource": [
+            {
+                "userPrompt": "Create a new resource named 'email_settings' with SMTP host 'smtp.example.com' port 514",
+                "response": {
+                    "intent": "create",
+                    "resourceName": "email_settings",
+                    "resourceType": "resource",
+                    "data": {
+                        "type": "resource",
+                        "name": "email_settings",
+                        "values": [
+                            {
+                                "fieldName": "smtp_host",
+                                "value": "smtp.example.com"
+                            },
+                            {
+                                "fieldName": "port",
+                                "value": "514"
+                            }
+                        ]
+                    },
+                    "query": {
+                        "operator": "create",
+                        "document": {
+                            "type": "resource",
+                            "name": "email_settings",
+                            "values": [
+                                {
+                                    "fieldName": "smtp_host",
+                                    "value": "smtp.example.com"
+                                },
+                                {
+                                    "fieldName": "port",
+                                    "value": "514"
+                                }
+                            ],
+                            "isDeleted": false,
+                            "createdAt": "$$NOW",
+                            "updatedAt": "$$NOW"
+                        }
+                    },
+                    "confirm": true,
+                    "followup": "I'll create a resource named 'email_settings' with SMTP host and 514 port. Should I proceed with the action?"
+                }
+            },
+            {
+                "userPrompt": "Yes proceed. Okay",
+                "response": {
+                    "intent": "create",
+                    "resourceName": "email_settings",
+                    "resourceType": "resource",
+                    "data": {
+                        "type": "resource",
+                        "name": "email_settings",
+                        "values": [
+                            {
+                                "fieldName": "smtp_host",
+                                "value": "smtp.example.com"
+                            },
+                            {
+                                "fieldName": "port",
+                                "value": "514"
+                            }
+                        ]
+                    },
+                    "query": {
+                        "operator": "create",
+                        "document": {
+                            "type": "resource",
+                            "name": "email_settings",
+                            "values": [
+                                {
+                                    "fieldName": "smtp_host",
+                                    "value": "smtp.example.com"
+                                },
+                                {
+                                    "fieldName": "port",
+                                    "value": "514"
+                                }
+                            ],
+                            "isDeleted": false,
+                            "createdAt": "$$NOW",
+                            "updatedAt": "$$NOW"
+                        }
+                    },
+                    "confirm": true,
+                    "followup": "Action complete!"
+                }
+            },
+            {
+                "userPrompt": "Find all organizations resource where type is logistics",
+                "response": {
+                    "intent": "find",
+                    "resourceName": "organizations",
+                    "resourceType": "resource",
+                    "data": {
+                        "fieldName": "type",
+                        "value": "logistics"
+                    },
+                    "query": {
+                        "operator": "find",
+                        "document": {
+                            "name": "organizations",
+                            "type": "resource",
+                            "values": {
+                                "$elemMatch": {
+                                    "fieldName": "type",
+                                    "value": "logistics"
+                                }
+                            },
+                            "isDeleted": false
+                        }
+                    },
+                    "confirm": false,
+                    "followup": "Do you need anything else?"
+                }
+            },
+            {
+                "userPrompt": "Find all resource connections related to user ID 12345",
+                "response": {
+                    "intent": "read",
+                    "resourceName": "",
+                    "resourceType": "connections",
+                    "data": {
+                        "relationships": {
+                            "refId": "12345"
+                        }
+                    },
+                    "query": {
+                        "operator": "find",
+                        "document": {
+                            "type": "connections",
+                            "relationships": {
+                                "$elemMatch": {
+                                    "refId": "ObjectId"
+                                }
+                            },
+                            "isDeleted": false
+                        }
+                    },
+                    "confirm": false,
+                    "followup": "Should I also check for specific connection types, or just all connections referencing this user?"
+                }
+            }
+        ]
+    },
+    "errorHandling": {
+        "invalidType": {
+            "response": {
+                "intent": "read",
+                "resourceName": "",
+                "resourceType": "",
+                "data": {},
+                "query": {},
+                "confirm": false,
+                "followup": "Resource type must be one of: 'resource', 'config', or 'connections'. Which type did you mean?",
+                "validation": {
+                    "missingFields": [
+                        "type"
+                    ],
+                    "invalidFields": [
+                        "type"
+                    ]
+                }
+            }
+        },
+        "missingName": {
+            "response": {
+                "intent": "create",
+                "resourceName": "",
+                "resourceType": "",
+                "data": {},
+                "query": {},
+                "confirm": false,
+                "followup": "All resources require a name. What should we name this resource?"
+            }
+        }
+    }
+}
