@@ -22,11 +22,15 @@ import resourcetagRouter from './routes/resource-tag.route.js';
 import dynamicChatRouter from './routes/dynamic-chat.route.js';
 
 import { resourceParent } from "./middlewares/resourceParent.js";
+import conversationRoutes from './routes/conversationRoutes.js';
+import converseRouter from './routes/converse-tag.route.js';
+import aiRouter from './ai/index.js';
+import aiConverseRouter from './ai/routes/converse.route.js';
 
 import connectDB from './services/db.js';
 
-// import swaggerUi from "swagger-ui-express";
-// import swaggerSpec from "./docs/swagger.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./docs/swagger.js";
 
 // mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/alayon', {
 //     useNewUrlParser: true,
@@ -63,7 +67,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 app.use('/config', express.static('config'))
-// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
@@ -102,8 +106,11 @@ app.use("/api/prompt", promptRouter);
 //V1
 app.use("/api/v1", resourcetagRouter);
 app.use("/api/v1/chat", dynamicChatRouter);
+app.use('/api/v1/conversations', conversationRoutes);
+app.use('/api/v1/converse', converseRouter);
 
-
+app.use('/api/v1/ai', aiRouter);
+app.use('/api/v1/ai/converse', aiConverseRouter);
 
 
 app.get("/api/test", async (req, res) => {
@@ -148,7 +155,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
 
         // Run Python Whisper transcription
         const { stdout } = await new Promise((resolve, reject) => {
-            exec(`python3 transcribe.py "${wavPath}"`, (err, stdout, stderr) => {
+            exec(`python transcribe.py "${wavPath}"`, (err, stdout, stderr) => {
                 if (err) return reject(stderr);
                 resolve({ stdout });
             });
@@ -156,7 +163,7 @@ app.post('/transcribe-mp3', upload.single('audio'), async (req, res) => {
 
         res.json({ text: stdout.trim() });
     } catch (error) {
-        console.error('Error:', error);
+        console.log('Error:', error);
         res.status(500).json({ error: 'Failed to transcribe' });
     } finally {
         await fs.unlink(mp3Path).catch(() => { });

@@ -2,10 +2,12 @@
 import mongoose from "mongoose";
 
 const FieldSchema = new mongoose.Schema({
-    fieldName: { type: String, required: true },
-    dataType: { type: String, required: true },
+    fieldName: { type: String },
+    dataType: { type: String },
     description: { type: String },
     optionsResourceType: { type: String },
+    examples: [String],
+    validation: String,
     required: { type: Boolean, default: false }
 }, { _id: false });
 
@@ -42,6 +44,9 @@ const resourceTagSchema = new mongoose.Schema({
     },
     isDeleted: { type: Boolean, default: false }
 }, { timestamps: true });
+
+resourceTagSchema.index({ type: 1, name: 1 });
+
 
 export const ResourceTag = mongoose.models.ResourceTag || mongoose.model("ResourceTag", resourceTagSchema);
 

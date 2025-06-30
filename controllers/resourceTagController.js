@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 export const getResourceWithRelationships = async (req, res) => {
     try {
         const { id } = req.params;
-        const query = { _id: id };
+        const query = { _id: id, isDeleted: false };
 
         // Add resourceParent filter if exists in request
         if (req.resourceParent) {
@@ -43,7 +43,8 @@ export const getResourceWithRelationships = async (req, res) => {
                 if (Array.isArray(val.value)) {
                     const refs = await ResourceTag.find({
                         _id: { $in: val.value },
-                        ...(req.resourceParent && { resourceParent: req.resourceParent._id })
+                        ...(req.resourceParent && { resourceParent: req.resourceParent._id }),
+                        isDeleted: false
                     }).lean();
                     output[val.fieldName] = refs.map(r => ({
                         _id: r._id,
@@ -79,7 +80,7 @@ export const getResourceWithRelationships = async (req, res) => {
         // Populate regular relationships grouped by type
         const relGroups = {};
         for (const rel of doc.relationships || []) {
-            const relQuery = { _id: rel.refId };
+            const relQuery = { _id: rel.refId, isDeleted: false };
             // Apply parent constraint to relationships if exists
             if (req.resourceParent) {
                 relQuery.resourceParent = req.resourceParent._id;

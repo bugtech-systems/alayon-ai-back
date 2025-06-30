@@ -134,15 +134,15 @@ const formatResourceResponse = (resource) => {
         id: resource._id,
         type: resource.type.toLowerCase(),
         name: resource.name,
-        attributes: Object.fromEntries(resource.values.map(item =>
+        attributes: Object.fromEntries(resource?.values.map(item =>
             [item.fieldName, item.value])),
         relationships: {
             ...(resource.resourceParent ? {
                 parent: formatResourceResponse(resource.resourceParent)
             } : {}),
-            ...Object.fromEntries(resource.relationships.map(rel => [
+            ...(resource?.relationships ? Object.fromEntries(resource?.relationships?.map(rel => [
                 rel.type, formatResourceResponse(rel.refId)
-            ]))
+            ])) : {})
         }
     };
 };
@@ -254,6 +254,7 @@ export const createResourceTag = async (req, res) => {
 export const getResourceTags = async (req, res) => {
     try {
         let { type } = req.params;
+
         // Build query from filters
         const query = buildQuery(req.query.filter);
 
@@ -261,6 +262,7 @@ export const getResourceTags = async (req, res) => {
         if (type != 'resources') {
             query.name = { $regex: new RegExp(`^${type}$`, "i") };
         }
+
         // Build sort
         const sort = buildSort(req.query.sort);
 
@@ -269,9 +271,14 @@ export const getResourceTags = async (req, res) => {
         const limit = parseInt(req.query.page?.size) || 25;
         const skip = (page - 1) * limit;
 
+        console.log(query, 'QUERY')
+
+
         // Execute query
         const [resourceTags, total] = await Promise.all([
-            ResourceTag.find(query)
+            ResourceTag.find({
+                ...query, isDeleted: false
+            })
                 .sort(sort)
                 .skip(skip)
                 .limit(limit)
@@ -279,6 +286,9 @@ export const getResourceTags = async (req, res) => {
                 .populate('relationships.refId'),
             ResourceTag.countDocuments(query)
         ]);
+
+
+        console.log(resourceTags, 'ssrrrtt', total)
 
         // Calculate pagination metadata
         const totalPages = Math.ceil(total / limit);
@@ -292,6 +302,7 @@ export const getResourceTags = async (req, res) => {
             }
         });
     } catch (error) {
+        console.log(error, 'sseerr')
         res.status(500).json({
             errors: [{
                 status: '500',

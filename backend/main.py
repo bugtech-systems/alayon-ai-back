@@ -23,7 +23,7 @@ from backend.utils import get_closest_prompt
 # ----------------------------------
 # Config and Constants
 # ----------------------------------
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://alayon:aEGqKZbvUF0j4DJH@saninisidr0.wuviu7x.mongodb.net")
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://127.0.0.1:11434/api/chat")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", 60))
 SYSTEM_DEFAULTS_PATH = os.getenv("SYSTEM_DEFAULTS_PATH", "system_defaults.json")
@@ -54,7 +54,7 @@ app.add_middleware(
 # MongoDB Connection
 # ----------------------------------
 client = MongoClient(MONGO_URI)
-db = client["alayon_resources"]
+db = client["alayon"]
 resources_col = db["resourcetags"]
 
 # ----------------------------------
@@ -141,7 +141,7 @@ def load_default_prompts() -> List[str]:
 async def call_ollama_ai(messages: List[Dict[str, str]]) -> str:
     payload = {
         "model": "mistral",
-        "temperature": 0.5,
+        "temperature": 0.2,
         "top_p": 0.9,
         "messages": messages,
         "stream": True

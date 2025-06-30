@@ -1,57 +1,58 @@
 import { ResourceTag } from '../models/resourceTag.model.js'; // Adjust path as needed
 // services/resourceService.js
 import mongoose from 'mongoose';
+import { resourceConfig } from './ollamaService.js';
 
 export async function getFilteredResources(resourceType, filters = {}) {
+    // Base query - resources of this type excluding configs
     const query = {
         $and: [
-            {
-                name: { $regex: new RegExp(resourceType, 'i') } // partial, case-insensitive
-            },
-            {
-                type: { $ne: 'config' } // exclude 'config'
-            }
-        ]
+            { name: { $regex: new RegExp(resourceType, 'i') } },
+            { type: { $ne: 'config' } }
+        ],
+        isDeleted: false
     };
 
-    let conf = await ResourceTag.findOne({ name: resourceType, type: 'config' });
+    // Get configuration for this resource type
+    const conf = await ResourceTag.findOne({
+        name: resourceType,
+        type: 'config', isDeleted: false
 
-    console.log(conf, 'CONF')
-    // Add filter for each key-value pair
-    for (const [key, value] of Object.entries(filters)) {
-        let fExist = false;
-        if (conf && conf.fields) {
-            fExist = conf.fields.find(a => a.fieldName == key);
-        }
-        if (value && fExist) {
+    }).lean();
+
+    // Apply filters only if they exist in config
+    const configFields = conf?.fields || [];
+    const validFilters = Object.entries(filters).filter(([key]) =>
+        configFields.some(f => f.fieldName.toLowerCase() === key.toLowerCase())
+    );
+
+    // Add filter conditions
+    validFilters.forEach(([key, value]) => {
+        if (value != null && value !== '') {
             query.$and.push({
                 values: {
                     $elemMatch: {
-                        fieldName: new RegExp(`^${key}$`, 'i'), // case-insensitive field name match
-                        value: { $regex: new RegExp(value, 'i') } // exact match, case-insensitive
+                        fieldName: { $regex: new RegExp(`^${key}$`, 'i') },
+                        value: typeof value === 'string'
+                            ? { $regex: new RegExp(value, 'i') }
+                            : value
                     }
                 }
             });
         }
-    }
+    });
 
     try {
         const matchedResources = await ResourceTag.find(query).lean();
 
-
-        console.log(matchedResources, 'MMMM')
-        const filtered = matchedResources.map(doc => {
-            const resourceObj = {};
-            resourceObj['name'] = doc.name;
-            // Map all values to key-value object
-            doc.values.forEach(({ fieldName, value }) => {
-                resourceObj[fieldName] = value;
-            });
-
-            return resourceObj;
-        });
-
-        return filtered;
+        // Transform results to key-value format
+        return matchedResources.map(doc => ({
+            _id: doc._id,
+            name: doc.name,
+            ...Object.fromEntries(
+                doc.values.map(({ fieldName, value }) => [fieldName, value])
+            )
+        }));
     } catch (err) {
         console.error('[getFilteredResources] Error:', err);
         throw err;
@@ -62,13 +63,15 @@ export async function getFilteredResources(resourceType, filters = {}) {
 
 // === Fetchers ===
 
-export const getResourceTypes = async ({ excludeOrganizations = false }) => {
-    let types = await ResourceTag.distinct('name');
+export const getResourceTypes = async (excludeOrganizations = false) => {
+    let types = await ResourceTag.distinct('name', { isDeleted: false });
     return excludeOrganizations ? types.filter(t => t.toLowerCase() !== 'organizations') : types;
 };
 
+
+
 export const getOrganizations = async () => {
-    const orgs = await ResourceTag.find({ name: { $regex: /^organizations$/i }, type: { $ne: 'config' } }).lean();
+    const orgs = await ResourceTag.find({ name: { $regex: /^organizations$/i }, type: { $ne: 'config' }, isDeleted: false }).lean();
 
     return orgs.map(org => {
         const valuesObj = {};
@@ -77,23 +80,12 @@ export const getOrganizations = async () => {
                 valuesObj[fieldName] = value;
             });
         }
-
-        return {
-            _id: org._id,
-            resourceName: org.name,
-            resourceType: org.type,
-            name: valuesObj.name || 'Unnamed',
-            values: valuesObj,
-            relationships: org.relationships || [],
-            resourceParent: org.resourceParent || null,
-            createdAt: org.createdAt,
-            updatedAt: org.updatedAt
-        };
+        return valuesObj.name || 'Unnamed';
     });
 };
 
 export const getResourcesByType = async (resourceType) => {
-    let resources = await ResourceTag.find({ type: resourceType }).lean();
+    let resources = await ResourceTag.find({ type: resourceType, isDeleted: false }).lean();
 
     return resources.map(org => {
         const valuesObj = {};
@@ -118,15 +110,38 @@ export const getResourcesByType = async (resourceType) => {
 };
 
 export const getFieldsByResourceType = async (resourceType) => {
-    const tag = await ResourceTag.findOne({ resourceType }).lean();
+    const tag = await ResourceTag.findOne({ type: 'config', name: resourceType, isDeleted: false }).lean();
     return tag?.fields || [];
 };
 
-export const findResourceByName = async (resourceType, name) => {
+export const findResourceByName = async (name) => {
     return await ResourceTag.findOne({
-        resourceType,
-        name: { $regex: new RegExp(name, 'i') }
+        type: 'config',
+        name: { $regex: new RegExp(name, 'i') },
+        isDeleted: false
     }).lean();
+};
+
+export const getResourceOptions = async (name) => {
+    const resources = await ResourceTag.find({
+        type: 'resource',
+        name: { $regex: new RegExp(name, 'i') },
+        isDeleted: false
+    }).lean();
+
+    const options = [];
+
+    for (const resource of resources) {
+        const matchedFields = resource.values?.filter(
+            field => field.fieldName === 'name'
+        ) || [];
+
+        for (const field of matchedFields) {
+            options.push(field.value);
+        }
+    }
+
+    return options;
 };
 
 // === Validators ===
@@ -162,16 +177,51 @@ export const formatRelationships = (relationships = []) => {
 
 // === Mutators ===
 
-export const createResource = async (resourceType, values, options = {}) => {
+export const createResource = async (name, values, options = {}) => {
     const { values: validatedValues, missingFields } = await validateFields(resourceType, values);
     const relationships = formatRelationships(options.relationships || []);
 
+    // Define what makes a resource "duplicate" (customize these fields as needed)
+    const duplicateCriteria = {
+        name,
+        values: validatedValues,
+    };
+
+    // Check for existing resource first
+    const existingResource = await ResourceTag.findOne(duplicateCriteria);
+
+    if (existingResource) {
+        // Option 1: Return existing resource (no duplication)
+        // return existingResource;
+
+        // Option 2: Update existing resource with new relationships/meta
+        const updates = {};
+
+        if (relationships.length > 0) {
+            updates.$addToSet = {
+                relationships: { $each: relationships }
+            };
+        }
+
+
+        if (Object.keys(updates).length > 0) {
+            return await ResourceTag.findByIdAndUpdate(
+                existingResource._id,
+                updates,
+                { new: true }
+            );
+        }
+
+        return existingResource;
+    }
+
+    // Create new resource if no duplicate exists
     const newResource = new ResourceTag({
-        resourceType,
+        name,
         values: validatedValues,
         relationships,
         resourceParent: options.resourceParent || null,
-        ...options.meta // any extra fields like name, tags, etc.
+        ...(options.meta && { meta: options.meta })
     });
 
     return await newResource.save();
@@ -212,7 +262,7 @@ export const getResourceTypesByName = async () => {
  * Returns an array of field names defined for a given resourceType.
  */
 export const getFieldsForResource = async (resourceType) => {
-    const record = await ResourceTag.findOne({ resourceType }).lean();
+    const record = await ResourceTag.findOne({ type: 'config', name: resourceType }).lean();
     if (!record || !Array.isArray(record.fields)) return [];
     return record.fields.map(f => f.fieldName);
 };
@@ -253,5 +303,43 @@ export const runQuery = async (session) => {
             return await ResourceTag.deleteMany({ resourceType: resource });
         default:
             return null;
+    }
+};
+
+
+export const resourceTagService = {
+    async createWithConfig(data) {
+        const values = resourceConfig.fields
+            .filter(field => data[field.fieldName] !== undefined)
+            .map(field => ({
+                fieldName: field.fieldName,
+                value: data[field.fieldName]
+            }));
+
+        const resource = {
+            type: data.type || 'resource',
+            name: data.name,
+            values,
+            isDeleted: false
+        };
+
+        return await ResourceTag.create(resource);
+    },
+
+    async findByConfig(filter) {
+        const query = {
+            isDeleted: false
+        };
+
+        if (filter.type) query.type = { $in: filter.types || resourceConfig.types };
+        if (filter.name) query.name = { $in: filter.names || resourceConfig.names };
+
+        if (filter.values) {
+            query.$and = filter.values.map(valueFilter => ({
+                values: { $elemMatch: valueFilter }
+            }));
+        }
+
+        return await ResourceTag.find(query);
     }
 };

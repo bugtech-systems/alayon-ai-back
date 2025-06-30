@@ -1,41 +1,37 @@
-// models/Session.js
 import mongoose from "mongoose";
 
-const FieldStateSchema = new mongoose.Schema({
-    fieldName: { type: String, required: true },
-    value: mongoose.Schema.Types.Mixed,
-    confirmed: { type: Boolean, default: false },
-    lastPrompted: { type: Date }
+const SessionStateSchema = new mongoose.Schema({
+    organization: String,
+    resourceName: String,
+    resourceType: String,
+    action: String,
+    requiredFields: String,
+    collectedData: mongoose.Schema.Types.Mixed,
+    confirmed: Boolean
 }, { _id: false });
 
-const MessageSchema = new mongoose.Schema({
-    role: { type: String, required: true, enum: ["user", "ai", "system"] },
-    content: { type: String, required: true },
-    metadata: { type: mongoose.Schema.Types.Mixed },
-    timestamp: { type: Date, default: Date.now }
-}, { _id: false });
-
-const sessionSchema = new mongoose.Schema({
-    sessionId: { type: String, required: true, unique: true },
-    userId: { type: String, required: false },
-    currentResource: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "ResourceTag",
-        required: false
-    },
-    fieldStates: [FieldStateSchema],
-    messages: [MessageSchema],
-    context: { type: mongoose.Schema.Types.Mixed, default: {} },
-    status: {
+const touchpointSchema = new mongoose.Schema({
+    name: {
         type: String,
-        enum: ["initializing", "collecting_fields", "processing", "completed", "abandoned"],
-        default: "initializing"
+        required: true,
+        default: 'session'
     },
-    expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) }
+    action: {
+        type: String,
+        enum: ['created', 'updated', 'deleted', 'retrieved'],
+        default: 'created'
+    },
+    organization: String,
+    resourceName: String,
+    timestamp: { type: Date, default: Date.now },
+    data: mongoose.Schema.Types.Mixed,
+    followUp: String,
+    userInput: String,
+    sessionId: String
 }, { timestamps: true });
 
-// Indexes
-sessionSchema.index({ sessionId: 1 });
-sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// TTL index for automatic cleanup
+touchpointSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1800 }); // 30 minutes
 
-export const Session = mongoose.models.Session || mongoose.model("Session", sessionSchema);
+export const Session = mongoose.models.Session ||
+    mongoose.model("Session", touchpointSchema);

@@ -7,7 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "ai": "nodemon ai/index.js"
   },
   "author": "John Benedict Geli",
   "license": "MIT",
@@ -20,6 +21,8 @@
     "lodash": "^4.17.21",
     "mongoose": "^8.15.0",
     "multer": "^2.0.0",
+    "natural": "^8.1.0",
+    "ollama": "^0.5.16",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   }

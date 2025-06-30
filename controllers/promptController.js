@@ -2,6 +2,7 @@
 import { processPrompt, analyzePrompt } from "../services/promptService.js";
 import { ResourceTag } from "../models/resourceTag.model.js";
 import { getFilteredResources } from "../services/resourceService.js";
+import { voicespeak } from "../speak.js";
 
 export const handlePrompt = async (req, res) => {
     const { prompt, sessionId = "default-session" } = req.body;
@@ -104,9 +105,12 @@ export const handleAnalyzePrompt = async (req, res) => {
         const promptResult = await processPrompt({ session_id: sessionId, data, instruction, expected_output_format, user_prompt });
 
         console.log("[handlePrompt] Processed prompt result:");
-        console.log("→ intent:", promptResult.intent);
+        console.log("→ intent:", promptResult.response);
         console.log("→ message:", result.message);
 
+        if (promptResult?.response?.message) {
+            await voicespeak(promptResult.response.message)
+        }
         // const logEntry = {
         //     resourceType: "PromptLog",
         //     name: sessionId,

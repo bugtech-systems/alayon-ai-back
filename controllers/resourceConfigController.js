@@ -3,7 +3,8 @@ import { ResourceTag } from "../models/resourceTag.model.js";
 export const getResourceConfig = async (req, res) => {
     const { type } = req.params;
     const query = {
-        type: 'config'
+        type: 'config',
+        isDeleted: false
     };
 
     if (type) {

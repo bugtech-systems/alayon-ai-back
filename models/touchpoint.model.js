@@ -10,11 +10,11 @@ const ValueSchema = new mongoose.Schema(
 
 const touchpointSchema = new mongoose.Schema(
     {
+        name: { type: String, required: true },
         action: { type: String, required: true }, // created, updated, deleted
         timestamp: { type: Date, default: Date.now },
-        values: [ValueSchema],
+        values: mongoose.Schema.Types.Mixed,
         notes: { type: String },
-
         resourceId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "ResourceTag",
