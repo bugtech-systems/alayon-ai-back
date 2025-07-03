@@ -1,7 +1,7 @@
 // services/ollamaService.js
 import axios from "axios";
 import { Ollama } from 'ollama';
-import { getFieldsForResource, getResourceTypes } from "./ResourceService.js";
+import { findActionTemplateByName, getFieldsForResource, getResourceTypes } from "./ResourceService.js";
 
 // Initialize Ollama client with your server configuration
 const ollama = new Ollama({
@@ -36,7 +36,6 @@ export const chatWithAI = async (messages) => {
     return data.message.content;
 };
 
-
 // Define the instruction as a constant
 const INSTRUCTION = `
 You are a MongoDB query generator for ResourceTag documents that identifies CRUD operations.
@@ -67,8 +66,6 @@ Rules:
      - Specificity of filters/updates
 5. Always summarize the proposed changes
 `;
-
-
 
 export async function generateQueryWithConfig(prompt, session) {
     const context = {
@@ -187,7 +184,6 @@ function processResponse(response, context) {
     }
 }
 
-
 export const calculateConfidence = (result, context) => {
     let score = 5; // Start with max confidence
 
@@ -214,7 +210,6 @@ function validateFields(result, context) {
         return !result.data.values?.some(v => v.fieldName === field);
     });
 }
-
 
 // export const queryResource = async (req, res) => {
 //     try {
@@ -391,7 +386,6 @@ const generateConfidenceScore = (response) => {
 //     return JSON.parse(response.response);
 // }
 
-
 export async function findBestMatch(options, userInput) {
     // Validation
     if (!Array.isArray(options) || !options.length || typeof userInput !== 'string' || !userInput.trim()) {
@@ -495,54 +489,58 @@ export async function findMatchAction(options, userInput) {
     }
 
     // Create a map of normalized options to original options
-    const optionMap = {};
-    options.forEach(opt => {
-        const normalized = opt.toLowerCase().replace(/\s+/g, ' ').trim();
-        optionMap[normalized] = opt;
-    });
-
-    const normalizedOptions = Object.keys(optionMap);
     const normalizedInput = userInput.toLowerCase().replace(/\s+/g, ' ').trim();
 
-    // First check for exact match
-    if (optionMap[normalizedInput]) {
-        return optionMap[normalizedInput];
-    }
+    // Prepare field information for the prompt
+    const fieldDescriptions = options.map(field => {
+        let description = `"${field.name}": ${field.description || 'No description'}`;
+        return description;
+    });
 
     // Then check for close matches using AI
     const prompt = `
-    RESOURCE ACTION MATCHING INSTRUCTIONS:
-    Select ONLY from these options or return null:
-    ${normalizedOptions.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
+RESOURCE ACTION MATCHING TASK:
 
-    User input: "${normalizedInput}"
+# GOAL: 
+Strictly match the user's input to ONE of the provided resource actions or return null.
 
-    Rules:
-    1. Return null unless you find match action
-    2. Only match against the listed options
-    3. Consider minor typos and word order
-    4. Consider matching related resource action
-    
-    JSON RESPONSE:
-    { match: "Selected action"}
-    `;
+# AVAILABLE ACTIONS (EXACT OPTIONS ONLY):
+${options.map((opt, i) => `[${i + 1}] "${opt.name}": ${opt.description || "No description"}`).join('\n')}
+
+# USER INPUT: 
+"${normalizedInput}"
+
+# RULES:
+1. **Exact Match Required**: Return ONLY if the input CLEARLY matches a listed action's name or description.
+2. **Null Default**: Return null if:
+   - No direct match exists (even if semantically close).
+   - Input is ambiguous (e.g., partial matches or typos beyond minor spelling variations).
+3. **No Hallucinations**: Never suggest actions outside the provided options.
+4. **Case/Format Insensitive**: Ignore capitalization, extra spaces, or punctuation (e.g., "CreAte-user" ≈ "create user").
+5. **No Explanations**: Return ONLY JSON, no additional text.
+
+# OUTPUT FORMAT:
+{ "match": "<EXACT_MATCHED_ACTION_NAME>" } or null
+`;
+
+    // Example expected outputs:
+    // 1. Match:    { "match": "createUser" } 
+    // 2. No Match: null
 
     try {
         const response = await ollama.generate({
-            model: 'mistral:7b',
+            model: 'alayon',
             prompt,
             format: 'json',
-            options: { temperature: 0.1 }
+            options: { temperature: 0.2 }
         });
 
-
-        console.log(response.response, 'RESPP')
-        console.log(normalizedOptions, optionMap, 'opptts')
         const result = JSON.parse(response.response);
-        console.log(result, 'res')
+        console.log(prompt, 'PROMPT', result)
 
-        if (result.match && normalizedOptions.includes(result.match)) {
-            return optionMap[result.match];
+        if (result.match) {
+            let action = await findActionTemplateByName(result.match)
+            return action;
         }
         return null;
     } catch (error) {
@@ -550,4 +548,5 @@ export async function findMatchAction(options, userInput) {
         return null;
     }
 }
+
 

@@ -9,11 +9,14 @@ import relationshipsRouter from './routes/relationships.js';
 import actionTemplatesRouter from './routes/actionTemplates.js';
 import resultReferencesRouter from './routes/resultReferences.js';
 import chatRouter from './routes/chat.js';
+import fineTuneRouter from './routes/trainModels.js';
 
 import morgan from 'morgan';
 import { swaggerSpec } from './configs/swagger.js';
 import swaggerUi from 'swagger-ui-express'
-import { initializeDatabase } from './models/index.js';
+import { initializeDatabase, db } from './models/index.js';
+import { Op } from 'sequelize';
+
 import multer from 'multer';
 import path from 'path';
 import { exec } from 'child_process';
@@ -93,6 +96,7 @@ app.use('/api/v1/relationships', relationshipsRouter);
 app.use('/api/v1/action-templates', actionTemplatesRouter);
 app.use('/api/v1/result-references', resultReferencesRouter);
 app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/tuner', fineTuneRouter);
 
 
 app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
@@ -132,6 +136,35 @@ app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
         await fs.unlink(wavPath).catch(() => { });
     }
 });
+
+
+app.get('/api/v1/test', async (req, res) => {
+    try {
+
+        const resources = await db.ResourceTag.findAll({
+            where: {
+                resource_parent_id: 1,
+                is_deleted: false,
+                type: 'resource',
+                attributes: {
+                    status: {
+                        [Op.in]: ['active', 'inactive']
+                    }
+                }
+            }
+        });
+
+
+        console.log(resources, 'rrr')
+
+        res.json({ text: 'Success', resources });
+    } catch (error) {
+        console.log('Error:', error);
+        res.status(500).json({ error: 'Failed to transcribe' });
+    }
+});
+
+
 
 
 

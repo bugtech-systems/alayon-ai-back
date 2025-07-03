@@ -234,12 +234,19 @@ export const findActionTemplateByName = async (name) => {
             model: db.ActionTemplateParameter,
             as: 'parameters',
             required: false
+        }, {
+            model: db.ResourceTag,
+            as: 'target_resource_type',
+            required: false
         }]
     }).catch(err => {
         console.log(err, 'RANGE ERR')
         return err
     });
 
+    if (!resource) {
+        return null
+    }
     return resource.get({ plain: true })
 };
 

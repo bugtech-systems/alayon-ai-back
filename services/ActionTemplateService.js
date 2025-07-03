@@ -1,3 +1,4 @@
+import { removeNullKeys } from '../helpers/helpers.js';
 import { db } from '../models/index.js';
 import ResourceApiService from './ResourceApiService.js';
 import { formattedResourceObject } from './ResourceService.js';
@@ -9,13 +10,15 @@ import resultReferenceService from './ResultReferenceService.js';
  * @param {Object} parameters - Key-value pairs of parameters
  * @returns {Promise<Object>} The execution result
  */
-export async function executeTemplate(template, parameters) {
+export async function executeTemplate(template, parameters, filter) {
     let result;
 
     // Run pre-hooks if any
     if (template.pre_hooks?.length > 0) {
         await executeHooks(template.pre_hooks, parameters, 'pre-hook');
     }
+
+    console.log(filter, ' FILETER')
 
     // Execute main action
     try {
@@ -24,7 +27,7 @@ export async function executeTemplate(template, parameters) {
                 result = await handleCreate(template, parameters);
                 break;
             case 'read':
-                result = await handleRead(template, parameters);
+                result = await handleRead(template, parameters, filter);
                 break;
             case 'update':
                 result = await handleUpdate(template, parameters);
@@ -68,6 +71,36 @@ export async function executeTemplate(template, parameters) {
     return result;
 }
 
+
+export async function getActionTemplates() {
+
+    try {
+
+        let resources = await db.ActionTemplate.findAll({
+            attributes: ['name', 'description', 'conditions', 'field_mappings', 'action_type', 'aggregations', 'target_resource_type_id'],
+            include: [{
+                model: db.ActionTemplateParameter,
+                as: 'parameters',
+                required: false
+            }, {
+                model: db.ResourceTag,
+                as: 'target_resource_type',
+                required: false
+            }]
+        }).catch(err => {
+            console.log(err, 'RANGE ERR')
+            return err
+        });
+
+        return resources
+    } catch (err) {
+        console.log(err, 'ERROR')
+    }
+
+}
+
+
+
 /**
  * Executes a series of hooks
  * @param {Array} hooks - Array of hook configurations
@@ -94,11 +127,12 @@ async function executeHooks(hooks, parameters, hookType) {
     }
 }
 
-async function handleCreate(template, parameters) {
+export async function handleCreate(template, parameters) {
     const transaction = await db.sequelize.transaction();
     try {
         const data = resolveFieldMappings(template.field_mappings, parameters);
 
+        console.log(data, 'CREATE DTA')
         // Resolve any value references
         if (data.attributes) {
             for (const [field_name, value] of Object.entries(data.attributes)) {
@@ -110,8 +144,8 @@ async function handleCreate(template, parameters) {
         }
 
 
+        let attributes = removeNullKeys(data.attributes);
 
-        console.log(data, template?.target_resource_type?.name, parameters, 'CREAATE')
         // const resource = await db.ResourceTag.create({
         //     type: 'resource',
         //     name: template?.target_resource_type?.name,
@@ -120,7 +154,7 @@ async function handleCreate(template, parameters) {
         // }, { transaction });
 
         const resource = await ResourceApiService.createResource(
-            { name: template?.target_resource_type?.name, attributes: data.attributes },
+            { name: template?.target_resource_type?.name, attributes: attributes },
             transaction
         );
 
@@ -133,12 +167,11 @@ async function handleCreate(template, parameters) {
     }
 }
 
-async function handleRead(template, parameters) {
-    const where = buildWhereClause(template, parameters);
+export async function handleRead(template, parameters, filter) {
+    const where = buildWhereClause(template, parameters, filter);
 
 
 
-    console.log(where, 'WHERE CLAUSE')
     if (template.aggregations &&
         (
             (Array.isArray(template.aggregations) && template.aggregations.length > 0) ||
@@ -153,24 +186,36 @@ async function handleRead(template, parameters) {
 
 
 
-
-
+    let whereFilter = filter?.where ? filter?.where : filter
+    console.log(where, 'WHERE CLAUSE', whereFilter, template)
+    console.log({
+        resource_parent_id: template.target_resource_type_id,
+        is_deleted: false,
+        name: template?.target_resource_type.name,
+        type: 'resource',
+        attributes: {
+            ...whereFilter, ...whereFilter.attributes, ...where, ...where.attributes
+        }
+    })
     let resourceIds = await db.ResourceTag.findAll({
         where: {
             resource_parent_id: template.target_resource_type_id,
             is_deleted: false,
+            name: template?.target_resource_type.name,
             type: 'resource',
-            ...where
+            attributes: {
+                ...whereFilter.attributes, ...where.attributes
+            }
         },
         attributes: ['id', 'name', 'attributes'],
         order: [['created_at', 'DESC']]
     }).then(doc => {
+
         return doc.map(a => { return { id: a.id, ...a.attributes } })
     }).catch(err => {
+        console.log(err, 'ERRORR')
         return []
     });
-
-    console.log(resourceIds, 'RESULTS', where)
 
     return resourceIds
 }
@@ -379,11 +424,11 @@ function resolveFieldMappings(mappings, parameters) {
     return result;
 }
 
-function buildWhereClause(template, params) {
+function buildWhereClause(template, params, filter = {}) {
     const where = {};
-    const conditions = template?.conditions || {};
+    const conditions = template.action_type == 'read' ? filter : template?.conditions;
     const fieldMappings = template.field_mappings || {};
-
+    console.log(conditions, 'CONDITIONN')
     // First resolve all parameter references in the conditions
     const resolvedConditions = resolveParameterValue(conditions, params);
 
@@ -433,6 +478,8 @@ function buildWhereClause(template, params) {
             }
         }
     }
+
+    console.log(where, 'WHERE')
     // Apply field mappings to the where clause structure
     return applyFieldMappings(where, fieldMappings);
 }
@@ -568,4 +615,6 @@ function convertToFieldValueObject(flatObject) {
     }).filter(cond => Object.keys(cond).length > 0); // Remove empty conditions
     return conditions.length > 0 ? { [db.Sequelize.Op.or]: conditions } : {};
 }
+
+
 

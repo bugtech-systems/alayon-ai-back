@@ -36,7 +36,6 @@ class ResourceService {
             throw new Error(`Parent config resource not found for name: ${resourceName}`);
         }
 
-        console.log(parentResource, 'paar')
 
         // Build field definitions map
         const fieldDefinitions = parentResource.fields.reduce((acc, field) => {
@@ -170,7 +169,6 @@ class ResourceService {
             }
         }
 
-        console.log(parentResource, fieldDefinitions, 'paar')
         return {
             parentResource,
             fieldDefinitions
@@ -237,6 +235,34 @@ class ResourceService {
     }
 
     async getResourcesByType(identifier) {
+
+        const include = [
+            {
+                model: this.ResourceRelationship,
+                as: 'outgoing_relationships',
+                where: { is_deleted: false },
+                required: false,
+                include: [{
+                    model: this.ResourceTag,
+                    as: 'target_resource',
+                    where: { is_deleted: false },
+                    required: false
+                }]
+            },
+            {
+                model: this.ResourceRelationship,
+                as: 'incoming_relationships',
+                where: { is_deleted: false },
+                required: false,
+                include: [{
+                    model: this.ResourceTag,
+                    as: 'source_resource',
+                    where: { is_deleted: false },
+                    required: false
+                }]
+            }
+        ];
+
         // Determine if the identifier is an ID (number) or name (string)
         const whereCondition = Number.isInteger(identifier) || /^\d+$/.test(identifier)
             ? { resource_parent_id: identifier }
@@ -251,20 +277,7 @@ class ResourceService {
                 ...whereCondition,
                 is_deleted: false
             },
-            include: [
-                {
-                    model: this.ResourceRelationship,
-                    as: 'outgoing_relationships',
-                    where: { is_deleted: false },
-                    required: false,
-                    include: [{
-                        model: this.ResourceTag,
-                        as: 'target_resource',
-                        where: { is_deleted: false },
-                        required: false
-                    }]
-                }
-            ],
+            include: include,
             order: [['created_at', 'DESC']]
         });
     }

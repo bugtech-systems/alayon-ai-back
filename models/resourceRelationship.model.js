@@ -37,6 +37,10 @@ export default ({ sequelize, Op }, DataTypes) => {
             type: DataTypes.STRING(100),
             allowNull: false
         },
+        attributes: {
+            type: DataTypes.JSONB,
+            description: "Resource data object"
+        },
         start_at: {
             type: DataTypes.DATE,
             allowNull: true,
@@ -172,19 +176,7 @@ export default ({ sequelize, Op }, DataTypes) => {
         }
     });
 
-    ResourceRelationship.associate = (models) => {
-        ResourceRelationship.belongsTo(models.ResourceTag, {
-            foreignKey: 'source_resource_id',
-            as: 'source_resource',
-            onDelete: 'CASCADE'
-        });
 
-        ResourceRelationship.belongsTo(models.ResourceTag, {
-            foreignKey: 'target_resource_id',
-            as: 'target_resource',
-            onDelete: 'CASCADE'
-        });
-    };
 
     return ResourceRelationship;
 };

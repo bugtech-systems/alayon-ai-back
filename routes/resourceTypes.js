@@ -66,7 +66,7 @@ router.post('/', async (req, res) => {
 
         const resourceType = await db.ResourceTag.create({
             type: 'config',
-            name
+            name: String(name).toLowerCase()
         }, { transaction });
 
         if (fields && fields.length > 0) {

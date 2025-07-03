@@ -31,15 +31,17 @@ const router = express.Router();
 router.post('/', async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
     try {
-        const { source_resource_id, target_resource_id, relationship_type } = req.body;
+        const { source_resource_id, target_resource_id, relationship_type, attributes } = req.body;
 
         // Validate input
         if (!source_resource_id || !target_resource_id || !relationship_type) {
-            throw new Error('Source resource ID, target resource ID, and relationship type are required');
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Source resource ID, target resource ID, and relationship type are required' });
         }
 
         if (source_resource_id === target_resource_id) {
-            throw new Error('Cannot create relationship to the same resource');
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Cannot create relationship to the same resource' });
         }
 
         // Verify resources exist
@@ -49,26 +51,30 @@ router.post('/', async (req, res, next) => {
         ]);
 
         if (!sourceResource || !targetResource) {
-            throw new Error('One or both resources not found');
+            await transaction.rollback();
+            return res.status(404).json({ error: 'One or both resources not found' });
         }
 
         const relationship = await db.ResourceRelationship.create({
             source_resource_id,
             target_resource_id,
             relationship_type,
+            attributes,
             is_active: true
         }, { transaction });
 
         await transaction.commit();
 
+        // Don't use transaction here since it's already committed
         const createdRelationship = await db.ResourceRelationship.findByPk(relationship.id, {
-            include: ['source_resource', 'target_resource'],
-            transaction
+            include: ['source_resource', 'target_resource']
         });
 
-        res.status(201).json(createdRelationship);
+        return res.status(201).json(createdRelationship);
     } catch (error) {
-        await transaction.rollback();
+        if (transaction.finished !== 'commit') {
+            await transaction.rollback();
+        }
         next(error);
     }
 });
@@ -122,7 +128,7 @@ router.get('/:resourceId', async (req, res, next) => {
             direction: rel.source_resource_id === parseInt(req.params.resourceId) ? 'outgoing' : 'incoming'
         }));
 
-        res.json(formattedRelationships);
+        return res.json(formattedRelationships);
     } catch (error) {
         next(error);
     }
@@ -164,9 +170,11 @@ router.delete('/:id', async (req, res, next) => {
         }
 
         await transaction.commit();
-        res.json({ message: 'Relationship deleted successfully' });
+        return res.json({ message: 'Relationship deleted successfully' });
     } catch (error) {
-        await transaction.rollback();
+        if (transaction.finished !== 'commit') {
+            await transaction.rollback();
+        }
         next(error);
     }
 });

@@ -4,12 +4,14 @@ import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { db } from '../models/index.js';
 
+
 class AIService {
     constructor() {
         this.llm = new Ollama({
             baseUrl: 'http://localhost:11434',
             model: 'mistral', // or 'llama3'
-            temperature: 0.1
+            temperature: 0.1,
+            top_p: 0.9
         });
     }
 
@@ -231,24 +233,85 @@ Response MUST be valid JSON in this exact format:
         return output;
     }
 
-    async formatResultsForUser(results, query) {
+    async formatResultsForUser(results, query, explanation) {
+        console.log(explanation, 'EXPLAIN')
+
         const prompt = `
-You are Alayon AI a helpful assistant to explain database query results to non-technical users.
+You are Alayon AI a helpful assistant to explain data results to non-technical users.
 
 User asked: "${query}"
 
-Here are the query results in JSON format:
+
+
+Here are the data results in JSON format:
 ${JSON.stringify(results, null, 2)}
 
-Please:
+**Action Result**:
+${explanation}
+
+Important Rules:
 1. Present the information in a clear, non-technical manner.
 2. Use bullet points for lists and tables for tabular data.
-2. Response should be precise, SMS Friendly and not more than 700 characters long of necessary.
+3. Response should be short, precise, SMS Friendly.
+4. Response Should be In a human readable, organize format.
+5. Provide brief information about the action.
 
 Response:
     `;
-
+        console.log(prompt, 'USER RESP')
         return this.generateResponse(prompt);
+    }
+
+    buildOllamaPrompt(actions, userInput) {
+        let resources = [...new Set(actions.map(a => a.resource))]
+        return `
+  Objective: Identify the matching "action template", with exact match of "action" and "resource" from the user's input below. 
+  Return ${JSON.stringify({ template: "string | null", action: "string | null", resource: "string | null" })} format.
+
+Template Options:
+  ${JSON.stringify(actions, null, 2)}
+
+Allowed Actions (with keywords):
+ - **read**: (provide | get | list | view | give | find)
+ - **create**: (new | create | add | setup)
+ - **update**: (modify | edit | update | change)
+ - **delete**: (remove | clear | forget)
+
+Allowed Resources:
+ ${JSON.stringify(resources, null, 2)}
+
+
+ **Important**:
+ - Return template null if no exact matching for action resource pair.
+ - Select only from options provided.
+ - Template action and resource should match.
+ - Respond in JSON.
+
+  User Input: "${userInput}"
+
+  Output(JSON):
+  `;
+    }
+
+    /**
+     * Calls Ollama to process the prompt.
+     */
+
+
+    async callOllama(prompt) {
+        try {
+            console.log(prompt, 'PROMPT')
+
+            const response = await this.llm.generate([prompt])
+
+
+            console.log(response, 'RESPONSEE')
+
+            return response.generations[0];
+        } catch (error) {
+            console.error("Ollama API error:", error.message);
+            throw new Error("Failed to process request with Ollama.");
+        }
     }
 }
 

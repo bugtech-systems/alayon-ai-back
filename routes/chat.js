@@ -1,28 +1,30 @@
 import express from 'express';
 import { db } from '../models/index.js';
 import aiService from '../services/aiServices.js';
-import { executeTemplate } from '../services/ActionTemplateService.js';
+import { executeTemplate, getActionTemplates, handleCreate, handleRead } from '../services/ActionTemplateService.js';
 import { voicespeak } from '../speak.js';
 import { sessionManager } from '../services/sessionStore.js';
 import { findActionTemplateByName, findResourceByName, getResourceTypes } from '../services/ResourceService.js';
 import { extractResourceName, objectToAIString } from '../helpers/helpers.js';
 import { findBestMatch, findMatchAction } from '../services/ollamaService.js';
+import AgenticAIService from '../services/agenticService.js';
 
 const router = express.Router();
 
 // Store conversation state in memory (for production use Redis)
 
-router.post('/conversation', async (req, res) => {
+
+const agenticService = new AgenticAIService(db);
+
+router.post('/alayon', async (req, res) => {
     const { voice } = req.query;
-    const { message, resource_type_id, conversation_id } = req.body;
+    const { message, conversation_id } = req.body;
     let session = sessionManager.getSession(conversation_id);
+    let resourceData = [];
     let response = {
-        text: 'Hi There!'
+        message: "Sorry! Unable to process your request."
     }
     try {
-
-
-
 
         if (!session) {
             console.log('[Session] Creating new session');
@@ -39,42 +41,220 @@ router.post('/conversation', async (req, res) => {
         });
 
 
+        let actionTemplates = await getActionTemplates();
+
+
+        const matchAction = await findMatchAction(actionTemplates, message);
+
+
+        if (!matchAction) {
+            // Format results for user
+            const formattedResponse = await aiService.formatResultsForUser(
+                [],
+                message,
+                'Action Not Allowed!'
+            );
+            response.message = formattedResponse;
+
+            return res.json({
+                ...response,
+                results: [],
+                session: session.id,
+
+            });
+        }
+
+        session.template = matchAction;
+
+
+        let resp = await agenticService.generateAIResponse(session, message)
+        let agentResp = JSON.parse(resp.response);
+        session.query = agentResp;
+
+
+        if ((matchAction && ['read', 'update', 'delete'].includes(matchAction.action_type))) {
+
+            resourceData = await handleRead(matchAction, agentResp.params, agentResp.filter);
+
+            session.results = resourceData;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        } else if (matchAction.action_type == 'create') {
+            resourceData = await handleCreate(matchAction, agentResp.params)
+        }
+
+
+
+
+
+
+
+
+
+        // Add AI response to history
+        session.history.push({ role: 'assistant', content: resp });
+
+        sessionManager.updateSession(session.id, session)
+
+
+
+
+
+        return res.json({
+            message: response.message,
+            session: session.id,
+            results: resourceData,
+            query: agentResp,
+            action_template: matchAction.name
+        });
+    } catch (error) {
+        console.log(error, 'ERRRR')
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Endpoint
+router.post('/detect-action', async (req, res) => {
+    try {
+        const { message } = req.body;
+
+        if (!message || typeof message !== 'string') {
+            return res.status(400).json({ error: "Invalid input: 'text' field is required." });
+        }
+
+        let actionTemplates = await getActionTemplates();
+
+
+
+        // Step 1: Build the Ollama prompt
+        const actionPrompt = aiService.buildOllamaPrompt(actionTemplates.map(a => { return { name: a.name, description: a.description, action: a.action_type, resource: a.target_resource_type.name } }), message)
+
+        const ollamaResponse = await aiService.callOllama(actionPrompt);
+
+        // Step 3: Parse and return the result
+        let result;
+        try {
+            result = JSON.parse(ollamaResponse[0].text.trim());
+        } catch (e) {
+            console.error("Failed to parse Ollama response:", ollamaResponse);
+            result = { action: null, resource: null, reason: "Invalid response format from Ollama." };
+        }
+
+        res.json(result);
+
+    } catch (error) {
+        console.error("Server error:", error.message);
+        res.status(500).json({ error: "Internal server error." });
+    }
+});
+
+
+router.post('/conversation', async (req, res) => {
+    const { voice } = req.query;
+    const { message, resource_type_id, conversation_id } = req.body;
+    let session = sessionManager.getSession(conversation_id);
+    let response = {
+        text: 'Hi There!'
+    }
+    try {
+
+
+
+
+        if (!session) {
+            console.log('[Session] Creating new session');
+            session = sessionManager.createSession(conversation_id);
+            // await agenticService.createConversation(session.id)
+        } else {
+            console.log(`[Session] Using existing session: ${session.id}`);
+        }
+
+
+
+
+
+
+        sessionManager.addHistory(session.id, {
+            role: 'user',
+            content: message
+        });
+
+
+        let actionTemplates = await getActionTemplates();
+
+
+        const match = await findMatchAction(actionTemplates.map(a => a.name), message);
+
+
+        console.log(match, 'MATCH')
+        if (match) {
+            session.resource_type_id = match.target_resource_type_id
+            session.template = match;
+
+        }
+
+
+        let resp = await agenticService.chat(session.id, message)
+
+
+
+        let agentResp = JSON.parse(resp.response);
 
         // Handle initialization stage
-        if (!session.organization || !session.resourceName) {
-            const result = await handleResourceSelection(message, session);
+        // if (!session.organization || !session.resourceName) {
+        //     const result = await handleResourceSelection(message, session);
 
-            if (result.organization) {
-                session.organization = result.organization;
-            }
-            if (result.resourceName) {
-                session.resourceName = result.resourceName;
-                session.resource_type_id = result.resourceId;
-                session.template = result.template;
-            }
+        //     if (result.organization) {
+        //         session.organization = result.organization;
+        //     }
+        //     if (result.resourceName) {
+        //         session.resourceName = result.resourceName;
+        //         session.resource_type_id = result.resourceId;
+        //         session.template = result.template;
+        //     }
 
-            if (result.resourceFields) {
-                session.resourceFields = result.resourceFields
-            }
+        //     if (result.resourceFields) {
+        //         session.resourceFields = result.resourceFields
+        //     }
 
 
-            sessionManager.updateSession(session.id, session);
-            /*            sessionManager.addHistory(session.id, {
-                           role: 'assistant',
-                           content: result.followUp
-                       });
-            */
-            // console.log(session, 'sssesss')
-            response.text = result.followUp;
-            /*            return res.json({
-                           conversation_id: session.id,
-                           response: {
-                               type: 'resource',
-                               text: result.followUp,
-                           },
-                           history: session.history
-                       }); */
-        }
+        //     sessionManager.updateSession(session.id, session);
+        //     /*            sessionManager.addHistory(session.id, {
+        //                    role: 'assistant',
+        //                    content: result.followUp
+        //                });
+        //     */
+        //     // console.log(session, 'sssesss')
+        //     response.text = result.followUp;
+        //     /*            return res.json({
+        //                    conversation_id: session.id,
+        //                    response: {
+        //                        type: 'resource',
+        //                        text: result.followUp,
+        //                    },
+        //                    history: session.history
+        //                }); */
+        // }
 
 
 
@@ -98,7 +278,7 @@ router.post('/conversation', async (req, res) => {
 
         // Generate AI response
         if (session.resource_type_id && session.template) {
-            response = await handleAIResponse(session);
+            response = await handleAIResponse(session, agentResp);
         }
 
         if (response && response.text && voice) {
@@ -107,7 +287,7 @@ router.post('/conversation', async (req, res) => {
 
 
         // Add AI response to history
-        session.history.push({ role: 'assistant', content: response.text });
+        session.history.push({ role: 'assistant', content: response });
 
         sessionManager.updateSession(session.id, session)
 
@@ -122,7 +302,7 @@ router.post('/conversation', async (req, res) => {
     }
 });
 
-async function handleAIResponse(conversation) {
+async function handleAIResponse(conversation, query) {
     const lastMessage = conversation.history[conversation.history.length - 1].content;
 
     try {
@@ -190,22 +370,21 @@ async function handleAIResponse(conversation) {
 
 
         // Try to convert natural language to action template
-        const { template_name, parameters = {}, explanation } =
-            await aiService.generateQueryFromNaturalLanguage(
-                lastMessage,
-                conversation.resource_type_id
-            );
+        // const { template_name, parameters = {}, explanation } =
+        //     await aiService.generateQueryFromNaturalLanguage(
+        //         lastMessage,
+        //         conversation.resource_type_id
+        //     );
+        console.log(query, 'QUERY')
 
-
-
-        const { filterQuery } = await aiService.generateQueryFromNaturalLanguageConvo(
-            lastMessage,
-            conversation
-        );
-
-        console.log(template_name, parameters, explanation, 'aaass')
-
-
+        /*        const { filterQuery } = await aiService.generateQueryFromNaturalLanguageConvo(
+                   lastMessage,
+                   conversation
+               );
+       
+               console.log(template_name, parameters, explanation, 'aaass')
+       
+        */
         let template = conversation.template;
         // Execute the action template
         // const template = await db.ActionTemplate.findOne({
@@ -214,11 +393,13 @@ async function handleAIResponse(conversation) {
         // });
 
         if (!template) {
-            throw new Error(`Action template "${template_name}" not found`);
+            throw new Error(`Action template "${template.name}" not found`);
         }
 
-        template.filterQuery = filterQuery;
+        // template.filterQuery = filter;
 
+        let parameters = query?.params;
+        let filter = query?.filter;
         // Validate parameters against template requirements
         const validationErrors = [];
 
@@ -306,8 +487,7 @@ async function handleAIResponse(conversation) {
 
 
         console.log('EXECUTE', template)
-
-        const results = await executeTemplate(template, parameters);
+        const results = await executeTemplate(template, parameters, filter);
 
         // Format results for user
         const formattedResponse = await aiService.formatResultsForUser(
@@ -321,10 +501,10 @@ async function handleAIResponse(conversation) {
         return {
             type: 'report',
             text: formattedResponse,
-            template_used: template_name,
+            template_used: template.name,
             parameters,
             results,
-            filterQuery
+            filter
         };
     } catch (error) {
         console.error('Error in handleAIResponse:', error);

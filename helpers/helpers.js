@@ -4,7 +4,7 @@ import { findResourceByName, getOrganizations, getResourcesByType, getResourceTy
 
 export function removeNullKeys(obj) {
     return Object.fromEntries(
-        Object.entries(obj).filter(([_, value]) => value !== null)
+        Object.entries(obj).filter(([_, value]) => !(value == null || value == 'undefined'))
     );
 }
 
@@ -168,6 +168,11 @@ export function objectToAIString(data) {
     }
 }
 
+
+export function generateId() {
+    return Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15);
+}
 
 // // Example usage:
 // const complexObj = {

@@ -34,7 +34,9 @@ const modelInitializers = [
     { name: 'ResourceRelationship', init: (await import('./resourceRelationship.model.js')).default },
     { name: 'ActionTemplate', init: (await import('./actionTemplate.model.js')).default },
     { name: 'ActionTemplateParameter', init: (await import('./actionTemplateParameter.js')).default },
-    { name: 'TemplateExecutionResult', init: (await import('./templateExecutionResult.model.js')).default }
+    { name: 'TemplateExecutionResult', init: (await import('./templateExecutionResult.model.js')).default },
+    { name: 'Conversation', init: (await import('./conversation.model.js')).default },
+    // { name: 'Message', init: (await import('./message.model.js')).default }
 
 ];
 
@@ -86,6 +88,18 @@ function defineAssociations() {
         foreignKey: 'field_id',
         as: 'field'
     });
+
+    /*     db.Conversation.hasMany(db.Message, {
+            foreignKey: 'conversation_id',
+            as: 'messages',
+            onDelete: 'CASCADE'
+        });
+    
+    
+        db.Message.belongsTo(db.Conversation, {
+            foreignKey: 'conversation_id',
+            as: 'conversation'
+        }); */
 
     // ResourceValue associations
     // db.ResourceTag.hasMany(db.ResourceValue, {
