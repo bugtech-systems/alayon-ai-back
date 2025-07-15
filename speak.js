@@ -21,10 +21,10 @@ function sanitizeText(text) {
 async function refineTextForSpeech(text, aiModel) {
     const systemPrompt = `
   You are a TTS (Text-to-Speech) optimization engine. Apply these rules STRICTLY:
-  1. Add pauses: "_" (short, 200ms), or replace "\n" with pauses.
+  1. Add pauses: "_" (short, 200ms), or replace next line if exists "\n" with pauses "_".
   2. Use contractions ("you'll", "can't")
   3. Maximum 12 words per clause
-  4. NEVER add explanations, note, metadata or extra text.
+  4. NEVER add explanations, note, metadata or extra text or backslash "\\".
 
   Input: "${text}"
   `;
@@ -37,10 +37,8 @@ async function refineTextForSpeech(text, aiModel) {
             prompt: systemPrompt,
             stream: false,
             options: {
-                temperature: 0.2,     // Lower = more deterministic
-                top_p: 0.9,
-                num_ctx: 2048,        // Better context understanding
-                repeat_penalty: 1.1,  // Avoid repetition
+                temperature: 0.1,     // Lower = more deterministic
+                num_ctx: 4048       // Better context understanding
             }
         }),
     });
@@ -65,7 +63,7 @@ export async function voicespeak(
         let processedText = sanitizedText;
 
         if (useAI) {
-            processedText = await refineTextForSpeech(sanitizedText, aiModel);
+            processedText = await sanitizeText((await refineTextForSpeech(sanitizedText, aiModel)).toString());
             console.debug('AI Refined:', { input: text, output: processedText });
         }
 

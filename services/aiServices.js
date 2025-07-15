@@ -3,6 +3,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { StructuredOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { db } from '../models/index.js';
+import { removeNullKeys } from '../helpers/helpers.js';
 
 
 class AIService {
@@ -11,7 +12,8 @@ class AIService {
             baseUrl: 'http://localhost:11434',
             model: 'mistral', // or 'llama3'
             temperature: 0.1,
-            top_p: 0.9
+            numCtx: 4096,
+            topP: 0.9
         });
     }
 
@@ -187,9 +189,7 @@ Response MUST be valid JSON in this exact format:
         try {
 
 
-            console.log(prompt, response, 'ai resp')
             const result = JSON.parse(response);
-            console.log(result, 'ai results', fieldsInfo)
 
             // Validate fields exist in schema
             if (result.filterQuery) {
@@ -234,31 +234,34 @@ Response MUST be valid JSON in this exact format:
     }
 
     async formatResultsForUser(results, query, explanation) {
-        console.log(explanation, 'EXPLAIN')
-
+        let newResults = results.map(a => removeNullKeys(a))
+        console.log(newResults, 'nrew')
         const prompt = `
-You are Alayon AI a helpful assistant to explain data results to non-technical users.
+You are Alayon AI a helpful assistant to report data results to non-technical users.
+
+##DATA CONTEXT(JSON):
+${JSON.stringify(newResults)}
+
 
 User asked: "${query}"
 
 
-
-Here are the data results in JSON format:
-${JSON.stringify(results, null, 2)}
-
-**Action Result**:
+Important Instruction:
 ${explanation}
+
 
 Important Rules:
 1. Present the information in a clear, non-technical manner.
-2. Use bullet points for lists and tables for tabular data.
-3. Response should be short, precise, SMS Friendly.
-4. Response Should be In a human readable, organize format.
-5. Provide brief information about the action.
+2. Analyze carefully and understand the data context key value pairs in JSON.
+3. Response should complete, precise, SMS Friendly.
+4. Do not come-up with value not specified in the object. Do not provide recommendations or suggestions.
+5. Respond the data objects that user asked or specified to provide.
+
+
 
 Response:
     `;
-        console.log(prompt, 'USER RESP')
+
         return this.generateResponse(prompt);
     }
 
@@ -266,32 +269,136 @@ Response:
         let resources = [...new Set(actions.map(a => a.resource))]
         return `
   Objective: Identify the matching "action template", with exact match of "action" and "resource" from the user's input below. 
-  Return ${JSON.stringify({ template: "string | null", action: "string | null", resource: "string | null" })} format.
 
-Template Options:
-  ${JSON.stringify(actions, null, 2)}
+##CONTEXT:
+Template Options: 
+  ${JSON.stringify(actions.map((a, index) => a.name), null, 2)}
 
-Allowed Actions (with keywords):
- - **read**: (provide | get | list | view | give | find)
- - **create**: (new | create | add | setup)
- - **update**: (modify | edit | update | change)
- - **delete**: (remove | clear | forget)
+Action Options:
+create, update, delete, read, clear
 
-Allowed Resources:
+Resource Options:
  ${JSON.stringify(resources, null, 2)}
 
-
- **Important**:
- - Return template null if no exact matching for action resource pair.
+**Important**:
  - Select only from options provided.
- - Template action and resource should match.
- - Respond in JSON.
+ - From action and resource analyze and find the template match.
+ - If no template match. Set action and template to null.
+ - Set action to clear if user wants to clear context or clear question.
+ - Respond in JSON ${JSON.stringify({ template: "string | null", action: "string | null", resource: "string | null" })} format.
+ - Do not come-up with value not specified in the options. Do not provide recommendations or suggestions.
 
+
+
+##QUESTION:
   User Input: "${userInput}"
 
+##ANSWER:
   Output(JSON):
   `;
     }
+
+    /**
+ * Generates an AI prompt for key-value extraction with context awareness
+ * @param {string} currentPrompt - The user's latest message
+ * @param {string} previousContext - Summary of previous relevant messages
+ * @param {string[]} requestedFields - Fields user asked to extract
+ * @param {string[]} requiredFields - Subset that must be populated
+ * @returns {string} - Formatted prompt for the AI
+ */
+
+    createExtractionPrompt(currentPrompt, previousContext, requestedFields, requiredFields) {
+        // Validate inputs
+        if (!requestedFields || requestedFields.length === 0) {
+            throw new Error('requestedFields must contain at least one field');
+        }
+
+
+        return `
+You are a precise information extraction assistant. Follow these rules:
+
+1. EXTRACTION SCOPE:
+- Only extract these requested fields: ${requestedFields.join(', ')}
+- Required fields: ${requiredFields.length > 0 ? requiredFields.join(', ') : 'none'}
+- Never assume values for unspecified fields
+
+2. CONTEXT HANDLING:
+Previous conversation context:
+"""
+${previousContext || 'No previous context provided'}
+"""
+
+
+3. CURRENT PROMPT ANALYSIS:
+"""
+${currentPrompt}
+"""
+
+4. PROCESSING INSTRUCTIONS:
+a) First scan current prompt for explicit key-value pairs
+b) Cross-reference with previous context only when:
+   - Current prompt implies continuation
+   - Previous values directly complete current fields
+c) For missing required fields, generate specific follow-up questions
+d) confidence: 0-4 scale based on response certainty, if exists in the context:
+        4 = Very Confident
+        3 = Confident
+        0-2 = Not Confident 
+
+
+5. OUTPUT FORMAT (as JSON):
+{
+  "status": "complete|incomplete",
+  "filter": { /* Sequelize where clause */ },
+  "params": { 
+      ${requestedFields.map(f => `"${f}": "[extracted_value|null]"`).join(',\n    ')}
+  },
+  "explanation": "concise question to get missing information | any relevant observations about context",
+  "confidence": number
+}
+
+6. SPECIAL CASES:
+- If field is ambiguous: Ask which interpretation is correct
+- If context contradicts current prompt: Flag and confirm
+- If overriding previous value: Note the change explicitly
+
+Now process the above prompt and context to extract the requested information.`;
+    }
+
+    generateActionConfirm(actionType, currentData, proposedData, entityName) {
+
+        // Build change list
+        const changes = [];
+        if (actionType === 'UPDATE') {
+            Object.entries(proposedData).forEach(([field, val]) =>
+                changes.push(`${field}:${currentData[field]}→${val}`));
+        } else if (actionType === 'CREATE') {
+            changes.push(...Object.entries(proposedData).map(([f, v]) => `${f}=${v}`));
+        }
+
+        // Action impact
+        const impacts = {
+            'UPDATE': `Will update ${changes.length} fields`,
+            'CREATE': `New ${entityName} with ${changes.length} fields`,
+            'DELETE': `PERMANENT deletion`
+        };
+
+        return `Confirm ${actionType} ${entityName}?
+${changes.join(', ')}
+
+${impacts[actionType]}
+❗Cannot undo
+
+Reply:
+Y - Confirm
+N - Cancel
+M - Modify
+? - Details`.slice(0, 700); // Hard limit
+    }
+
+
+
+
 
     /**
      * Calls Ollama to process the prompt.
@@ -300,12 +407,10 @@ Allowed Resources:
 
     async callOllama(prompt) {
         try {
-            console.log(prompt, 'PROMPT')
 
             const response = await this.llm.generate([prompt])
 
 
-            console.log(response, 'RESPONSEE')
 
             return response.generations[0];
         } catch (error) {

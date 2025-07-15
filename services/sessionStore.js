@@ -1,38 +1,39 @@
 const sessions = new Map();
 
 // Cleanup expired sessions every minute
-setInterval(() => {
-    const now = Date.now();
-    console.log(`[Session Cleanup] Running cleanup at ${new Date().toISOString()}`);
-    let cleanupCount = 0;
+// setInterval(() => {
+//     const now = Date.now();
+//     console.log(`[Session Cleanup] Running cleanup at ${new Date().toISOString()}`);
+//     let cleanupCount = 0;
 
-    for (const [sessionId, session] of sessions) {
-        if (now - session.lastAccessed > 30 * 60 * 1000) { // 30 minutes
-            sessions.delete(sessionId);
-            cleanupCount++;
-            console.log(`[Session Cleanup] Removed expired session: ${sessionId}`);
-        }
-    }
+//     for (const [sessionId, session] of sessions) {
+//         if (now - session.lastAccessed > 30 * 60 * 1000) { // 30 minutes
+//             sessions.delete(sessionId);
+//             cleanupCount++;
+//             console.log(`[Session Cleanup] Removed expired session: ${sessionId}`);
+//         }
+//     }
 
-    console.log(`[Session Cleanup] Removed ${cleanupCount} expired sessions`);
-}, 60 * 1000);
+//     console.log(`[Session Cleanup] Removed ${cleanupCount} expired sessions`);
+// }, 60 * 1000);
 
 export const sessionManager = {
     createSession() {
         const sessionId = generateId();
+        // const sessionId = 'session_420230'
+
         const session = {
             id: sessionId,
             results: [],
-            organization: null,
+            context: {},
+            pending: null,
+            lastMessage: '',
             resourceName: null,
-            resourceType: null,
-            filterData: {},
-            filterResults: [],
-            latestQuery: null,
-            latestData: null,
+            resourceId: null,
             createdAt: new Date(),
             expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min session
-            history: []
+            history: [],
+            status: 'followup'
         };
         sessions.set(sessionId, session);
         console.log(`[Session] Created new session: ${sessionId}`);

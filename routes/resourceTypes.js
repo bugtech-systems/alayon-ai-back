@@ -155,31 +155,68 @@ router.get('/', async (req, res, next) => {
  *       404:
  *         description: Resource type not found
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:identifier', async (req, res, next) => {
     try {
-        const resourceType = await db.ResourceTag.findByPk(req.params.id, {
+        const { identifier } = req.params;
+
+        // Determine if identifier is numeric (ID) or string (name)
+        const isNumericId = /^\d+$/.test(identifier);
+
+        const whereCondition = isNumericId
+            ? { id: identifier }
+            : {
+                name: db.sequelize.where(
+                    db.sequelize.fn('LOWER', db.sequelize.col('name')),
+                    '=',
+                    identifier.toLowerCase()
+                )
+            };
+
+        const resourceType = await db.ResourceTag.findOne({
+            where: {
+                ...whereCondition,
+                is_deleted: false,
+                type: 'config' // Ensure it's a config type as per your original check
+            },
             include: [
                 {
                     model: db.ResourceField,
                     as: 'fields',
+                    where: { is_deleted: false },
+                    required: false,
                     include: [{
                         model: db.FieldExample,
                         as: 'examples',
                         where: { is_deleted: false },
                         required: false
-                    }],
-                    where: { is_deleted: false },
-                    required: false
+                    }]
                 }
             ]
         });
 
-        if (!resourceType || resourceType.type != 'config') {
-            return res.status(404).json({ error: 'Resource type not found' });
+        if (!resourceType) {
+            return res.status(404).json({
+                error: 'Resource type not found',
+                message: `No configuration resource found with ${isNumericId ? 'ID' : 'name'} '${identifier}'`
+            });
         }
 
-        res.json(resourceType);
+        // Format the response
+        const response = {
+            data: {
+                id: resourceType.id,
+                name: resourceType.name,
+                type: resourceType.type,
+                attributes: resourceType.get({ plain: true }),
+
+            }
+        };
+        if (!resourceType) return res.status(404).json({ message: 'Resource Not Found!' })
+
+        let resData = resourceType.get({ plain: true })
+        return res.json(resData);
     } catch (error) {
+        console.error(`Error fetching resource: ${error.message}`);
         next(error);
     }
 });

@@ -17,6 +17,11 @@ export default ({ sequelize }, DataTypes) => {
             type: DataTypes.ENUM('create', 'read', 'update', 'delete'),
             allowNull: false
         },
+        resource_type: {
+            type: DataTypes.ENUM('config', 'resource', 'connection', 'execution'),
+            allowNull: false,
+            defaultValue: 'resource'
+        },
         conditions: {
             type: DataTypes.JSONB
         },

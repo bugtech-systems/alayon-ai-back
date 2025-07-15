@@ -5,17 +5,15 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
-        sessionId: {
-            type: DataTypes.STRING(255),
+
+        rate: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
         },
         title: {
             type: DataTypes.STRING(255),
             allowNull: false,
             defaultValue: 'New Conversation'
-        },
-        metadata: {
-            type: DataTypes.JSONB,
-            defaultValue: {}
         },
         prompt: {
             type: DataTypes.TEXT,
@@ -25,13 +23,16 @@ export default ({ sequelize }, DataTypes) => {
             type: DataTypes.TEXT,
             allowNull: false
         },
+        metadata: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
         tokens: {
             type: DataTypes.INTEGER,
             defaultValue: 0
         },
-        rate: {
-            type: DataTypes.INTEGER,
-            defaultValue: 0
+        sessionId: {
+            type: DataTypes.STRING(255),
         },
         created_at: {
             type: DataTypes.DATE,

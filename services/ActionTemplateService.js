@@ -18,8 +18,6 @@ export async function executeTemplate(template, parameters, filter) {
         await executeHooks(template.pre_hooks, parameters, 'pre-hook');
     }
 
-    console.log(filter, ' FILETER')
-
     // Execute main action
     try {
         switch (template.action_type) {
@@ -95,6 +93,7 @@ export async function getActionTemplates() {
         return resources
     } catch (err) {
         console.log(err, 'ERROR')
+        return []
     }
 
 }
@@ -187,16 +186,7 @@ export async function handleRead(template, parameters, filter) {
 
 
     let whereFilter = filter?.where ? filter?.where : filter
-    console.log(where, 'WHERE CLAUSE', whereFilter, template)
-    console.log({
-        resource_parent_id: template.target_resource_type_id,
-        is_deleted: false,
-        name: template?.target_resource_type.name,
-        type: 'resource',
-        attributes: {
-            ...whereFilter, ...whereFilter.attributes, ...where, ...where.attributes
-        }
-    })
+
     let resourceIds = await db.ResourceTag.findAll({
         where: {
             resource_parent_id: template.target_resource_type_id,
@@ -204,14 +194,14 @@ export async function handleRead(template, parameters, filter) {
             name: template?.target_resource_type.name,
             type: 'resource',
             attributes: {
-                ...whereFilter.attributes, ...where.attributes
+                ...whereFilter?.attributes, ...where?.attributes
             }
         },
         attributes: ['id', 'name', 'attributes'],
-        order: [['created_at', 'DESC']]
+        order: [['created_at', 'DESC']],
+        raw: true
     }).then(doc => {
-
-        return doc.map(a => { return { id: a.id, ...a.attributes } })
+        return doc.map(a => { return { id: a.id, ...a?.attributes } })
     }).catch(err => {
         console.log(err, 'ERRORR')
         return []
@@ -428,7 +418,6 @@ function buildWhereClause(template, params, filter = {}) {
     const where = {};
     const conditions = template.action_type == 'read' ? filter : template?.conditions;
     const fieldMappings = template.field_mappings || {};
-    console.log(conditions, 'CONDITIONN')
     // First resolve all parameter references in the conditions
     const resolvedConditions = resolveParameterValue(conditions, params);
 
@@ -479,7 +468,6 @@ function buildWhereClause(template, params, filter = {}) {
         }
     }
 
-    console.log(where, 'WHERE')
     // Apply field mappings to the where clause structure
     return applyFieldMappings(where, fieldMappings);
 }

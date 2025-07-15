@@ -2,100 +2,13 @@ import axios from 'axios';
 import { db } from '../models/index.js';
 import ollama from 'ollama';
 import { Op } from 'sequelize';
+import { default_models } from '../tuner/models.js'
+import { systemPrompt } from '../helpers/system-prompt.js';
 
 // Get directory name in ESM
 
-const dbQueryAssistant = {
-    model: 'alayon',
-    from: 'mistral:latest',
-    stream: false, // Set to true if you want streaming responses
-    system: `You are a PostgreSQL/Sequelize query generator that outputs JSON with:
-1. filter: Sequelize where clause using ONLY fields mentioned in the prompt
-2. params: Extracted key-value pairs from the prompt
-3. explanation: Clear reasoning for the generated filter
-4. confidence: 0-4 scale based on response certainty, if exists in the context.
 
 
-Available Fields:
-- id, type, name, attributes.{any}, resource_parent_id, is_deleted, created_at, updated_at
-
-Important Rules
-1. Type should only ['config','resource', 'connection']
-2. Any key-value pairs other than "type", "name", "is_delete", "created_at", should be "attributes" fields
-3. If not sure about the prompt or not sure of your response, set confidence to 0.
-
-Response Template:
-{
-  "filter": { /* Sequelize where clause */ },
-  "params": { /* Extracted key value pairs */ },
-  "explanation": "text",
-  "confidence": number
-}`,
-    parameters: {
-        temperature: 0.1,
-        top_p: 0.9,
-        num_ctx: 2048
-    },
-    messages: [
-        // Few-shot learning examples
-        {
-            role: 'user',
-            content: 'Find blue resources with type "storage"'
-        },
-        {
-            role: 'assistant',
-            content: JSON.stringify({
-                filter: {
-                    attributes: { color: 'blue' },
-                    type: 'storage'
-                },
-                params: {
-                    color: 'blue',
-                    type: 'storage'
-                },
-                explanation: 'Filters for storage-type resources with blue color attribute',
-                confidence: 3
-            })
-        },
-        {
-            role: 'user',
-            content: 'Show deleted items from last week'
-        },
-        {
-            role: 'assistant',
-            content: JSON.stringify({
-                filter: {
-                    is_deleted: true,
-                    updated_at: {
-                        $gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                    },
-                    params: {
-                        status: 'deleted',
-                        timeframe: 'last week'
-                    },
-                    explanation: 'Deleted items updated in the past 7 days',
-                    confidence: 3
-                }
-            })
-        },
-        {
-            role: 'user',
-            content: 'Find important documents'
-        },
-        {
-            role: 'assistant',
-            content: JSON.stringify({
-                filter: {},
-                params: {
-                    importance: 'high'
-                },
-                explanation: 'No field mapping for "important documents"',
-                confidence: 0
-            })
-        }
-    ]
-
-};
 
 
 
@@ -113,6 +26,7 @@ export default class OllamaFineTuner {
         try {
             const messages = await db.Conversation.findAll({
                 where: {
+                    title: conversationId,
                     rate: {
                         [Op.gte]: 4
                     }
@@ -123,7 +37,6 @@ export default class OllamaFineTuner {
             });
 
 
-            console.log(messages, 'MESSAGE')
             return messages;
         } catch (error) {
             throw new Error(`Failed to load dataset: ${error.message}`);
@@ -158,7 +71,6 @@ export default class OllamaFineTuner {
             });
 
 
-            console.log(messages, 'MESSAGE')
             return messages;
         } catch (error) {
             throw new Error(`Failed to load dataset: ${error.message}`);
@@ -195,51 +107,60 @@ export default class OllamaFineTuner {
         }
     }
 
-    async fineTune(modelName, parameters = dbQueryAssistant.parameters) {
+    async fineTune(modelName, params = {}) {
 
         try {
             // 1. Verify directories
+            let responses = [];
+            // let dbQueryAssistant = default_models.find(a => a.model == modelName);
 
-            // 2. Load dataset
-            const dataset = await this.loadDataset();
+            for (let model of default_models) {
+                const dataset = await this.loadDataset(model.model);
+                // 2. Load dataset
+                let parameters = { ...model.parameters, ...params }
+                let messages = [];
 
-            let messages = [];
-
-            dataset.map(a => {
-                messages.push({
-                    role: 'user',
-                    content: a.prompt
-                });
-                messages.push({
-                    role: 'assistant',
-                    content: JSON.stringify(a.metadata)
-                });
-            })
-
-
-
-            console.log(messages, 'MESSAGES')
-            const query = {
-                ...dbQueryAssistant,
-                parameters,
-                messages: [...dbQueryAssistant.messages, ...messages]
-            };
+                dataset.map(a => {
+                    messages.push({
+                        role: 'user',
+                        content: a.prompt
+                    });
+                    messages.push({
+                        role: 'assistant',
+                        content: JSON.stringify(a.metadata)
+                    });
+                })
 
 
 
 
-            // 3. Create modelfile
-            const modelfile = await this.createModelfile(query);
+                const query = {
+                    ...model,
+                    system: model.model == 'alayon_sequelize' ? await systemPrompt() : model.system,
+                    parameters,
+                    messages: [...model.messages, ...messages]
+                };
 
 
 
+
+                // 3. Create modelfile
+                const modelfile = await this.createModelfile(query);
+
+                responses.push({
+                    // ...response.data,
+                    system: model.model == 'alayon_sequelize' ? await systemPrompt() : model.system,
+                    modelfile,
+                    modelName: model.model,
+                    dataset: query.messages
+                })
+            }
 
 
             return {
-                // ...response.data,
-                modelfile,
-                modelName,
-                dataset: query.messages
+                success: true,
+                data: responses,
+                message: 'Fine-tune success!'
             };
         } catch (error) {
             // Clean up temp file if it exists

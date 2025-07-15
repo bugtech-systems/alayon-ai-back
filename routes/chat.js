@@ -5,25 +5,43 @@ import { executeTemplate, getActionTemplates, handleCreate, handleRead } from '.
 import { voicespeak } from '../speak.js';
 import { sessionManager } from '../services/sessionStore.js';
 import { findActionTemplateByName, findResourceByName, getResourceTypes } from '../services/ResourceService.js';
-import { extractResourceName, objectToAIString } from '../helpers/helpers.js';
+import { extractResourceName, objectToAIString, removeNullKeys } from '../helpers/helpers.js';
 import { findBestMatch, findMatchAction } from '../services/ollamaService.js';
 import AgenticAIService from '../services/agenticService.js';
+import actionTemplateService from '../services/ActionTemplateService1.js';
+import Redis from 'ioredis';
+import axios from 'axios'
+import ResourceApiService from '../services/ResourceApiService.js';
+import { processMessage, confirmOperation, switchModel, generateAIResponse } from '../helpers/ollamaHelpers.js';
 
 const router = express.Router();
+
+
+// 2. Redis Session Store
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const SESSION_TTL = 60 * 60 * 2; // 2 hours
 
 // Store conversation state in memory (for production use Redis)
 
 
 const agenticService = new AgenticAIService(db);
 
+// Enhanced AI Service with All Features
+
+
 router.post('/alayon', async (req, res) => {
-    const { voice } = req.query;
+    // const { voice } = req.query;
+    let voice = false;
     const { message, conversation_id } = req.body;
     let session = sessionManager.getSession(conversation_id);
+    // let session = sessionManager.getSession('session_420230');
+
     let resourceData = [];
     let response = {
         message: "Sorry! Unable to process your request."
     }
+
+
     try {
 
         if (!session) {
@@ -35,24 +53,106 @@ router.post('/alayon', async (req, res) => {
 
 
 
-        sessionManager.addHistory(session.id, {
-            role: 'user',
-            content: message
-        });
+
+
+
+
+
+
+
+
+        if (session.status == 'confirmation') {
+
+            let { confirmed } = await actionTemplateService.checkConfirmation(message, session.query)
+
+            if (confirmed) {
+                response = await handleAIResponse(session, session.query);
+                const formattedResponse = await aiService.formatResultsForUser(
+                    [response],
+                    session?.query?.actionSummary,
+                    'Successfully Executed Action.'
+                );
+                session.status = '';
+
+                if (voice) {
+                    await voicespeak(formattedResponse);
+                }
+                return res.json({
+                    message: formattedResponse,
+                    session,
+                    query: session.query
+
+                });
+            } else {
+                session.status = 'followup';
+            }
+        }
+
 
 
         let actionTemplates = await getActionTemplates();
 
 
-        const matchAction = await findMatchAction(actionTemplates, message);
+
+        // Step 1: Build the Ollama prompt
+        const actionPrompt = aiService.buildOllamaPrompt(actionTemplates.map(a => { return { name: a.name, description: a.description, action: a.action_type, resource: a.target_resource_type.name } }), message)
+        const ollamaResponse = await actionTemplateService.callOllama(actionPrompt, 'alayon_action', {});
 
 
-        if (!matchAction) {
+        // Step 3: Parse and return the result
+        let resultAction;
+        try {
+            resultAction = JSON.parse(ollamaResponse.trim());
+        } catch (e) {
+            console.error("Failed to parse Ollama response:", ollamaResponse);
+            resultAction = { action: null, resource: null, reason: "Invalid response format from Ollama." };
+        }
+
+
+
+
+        if (resultAction.action == 'clear') {
+
+            session = sessionManager.createSession(conversation_id);
+
+            // sessionManager.updateSession(session.id, session);
+
+            console.log(session, 'CLEARED')
+            return res.json({
+                message: `Great! Successfully cleared context.`,
+                session: session,
+                sessionId: session.id,
+                action_template: session.template?.name,
+            });
+        }
+
+
+
+
+
+
+
+
+        // if (!resultAction.action) {
+        //     return res.status(401).json({ error: 'Action template dont exists' });
+        // }
+        let matchAction = session?.template;
+
+        if ((!session?.status || session?.status != 'confirmation')) {
+            let action = await findActionTemplateByName((resultAction.template || session.template_name));
+
+            if (action) {
+                matchAction = action
+            }
+        }
+
+
+
+        if ((!matchAction?.name && !session?.template_name)) {
             // Format results for user
             const formattedResponse = await aiService.formatResultsForUser(
-                [],
-                message,
-                'Action Not Allowed!'
+                ['Action not allowed'],
+                `Unable to process your request. Action not Allowed!`
             );
             response.message = formattedResponse;
 
@@ -60,23 +160,43 @@ router.post('/alayon', async (req, res) => {
                 ...response,
                 results: [],
                 session: session.id,
-
             });
         }
 
+
+        let fieldValidations = {};
+
+        matchAction?.parameters.map(a => {
+            fieldValidations[a.name] = {
+                required: a.required,
+                type: a.data_type,
+                default: a.default
+            };
+        })
+
+
+        // createExtractionPrompt
+
+        console.log(matchAction, 'MATCH ACTION')
         session.template = matchAction;
+        session.template_name = matchAction.name;
+        session.resourceName = matchAction.target_resource_type.name
+
+
+
+
+
 
 
         let resp = await agenticService.generateAIResponse(session, message)
         let agentResp = JSON.parse(resp.response);
+
+        if (matchAction) {
+            matchAction.conditions = agentResp.whereConditions;
+        }
         session.query = agentResp;
 
 
-        if ((matchAction && ['read', 'update', 'delete'].includes(matchAction.action_type))) {
-
-            resourceData = await handleRead(matchAction, agentResp.params, agentResp.filter);
-
-            session.results = resourceData;
 
 
 
@@ -84,6 +204,7 @@ router.post('/alayon', async (req, res) => {
 
 
 
+        // matchAction.conditions = agentResp.whereConditionss;
 
 
 
@@ -91,16 +212,93 @@ router.post('/alayon', async (req, res) => {
 
 
 
+        sessionManager.addHistory(session.id, {
+            role: 'user',
+            content: message
+        });
+
+        // Add AI response to history
+        sessionManager.addHistory(session.id, {
+            role: 'assistant',
+            content: JSON.stringify(agentResp)
+        });
+
+
+
+        sessionManager.updateSession(session.id, session)
+
+
+
+        let { isValid } = actionTemplateService.validateOperation(matchAction.action_type, agentResp)
+
+
+
+        if ((matchAction.action_type != 'read' || Object.keys(matchAction.conditions))) {
+            resourceData = await actionTemplateService.handleRead(matchAction, agentResp.data);
+            if (resultAction?.resource) {
+                session.context[resultAction?.resource] = resourceData;
+                session.status = agentResp.status;
+                session.results = resourceData;
+            }
+        }
 
 
 
 
 
+        if (!isValid) {
+
+            const formattedResponse = await aiService.formatResultsForUser(
+                session.context,
+                message,
+                'Provide action details summary. And ask followup questions!'
+            );
 
 
 
-        } else if (matchAction.action_type == 'create') {
-            resourceData = await handleCreate(matchAction, agentResp.params)
+            sessionManager.updateSession(session.id, session)
+
+            if (voice) {
+                await voicespeak(formattedResponse);
+            }
+            return res.json({
+                results: session.results,
+                message: formattedResponse,
+                session: session,
+                sessionId: session.id,
+                query: agentResp,
+                action_template: matchAction.name,
+            });
+
+
+        } else if (isValid && (matchAction.action_type == 'update' || matchAction.action_type == 'delete' || matchAction.action_type == 'create')) {
+
+
+
+
+
+            const formattedResponse = await aiService.formatResultsForUser(
+                session.context,
+                message,
+                'Respond with summary of data and ask for Confirmation to proceed with the action.'
+            );
+
+
+            sessionManager.updateSession(session.id, session)
+
+            if (voice) {
+                await voicespeak(formattedResponse);
+            }
+
+            return res.json({
+                results: resourceData,
+                message: formattedResponse,
+                session: session,
+                sessionId: session.id,
+                query: agentResp,
+                action_template: matchAction.name
+            });
+
         }
 
 
@@ -110,26 +308,52 @@ router.post('/alayon', async (req, res) => {
 
 
 
+        const formattedResponse = await aiService.formatResultsForUser(
+            resourceData?.length ? resourceData : ['No Data Found'],
+            message,
+            `IF context has data array or object Describe the data in the response or else ${agentResp.actionSummary}`
+        );
 
-        // Add AI response to history
-        session.history.push({ role: 'assistant', content: resp });
+
+        response.message = formattedResponse;
+
+
+
 
         sessionManager.updateSession(session.id, session)
 
 
 
 
+        if (voice) {
+            await voicespeak(response.message);
+        }
+
 
         return res.json({
-            message: response.message,
-            session: session.id,
             results: resourceData,
+            message: response.message,
+            session: session,
+            sessionId: session.id,
             query: agentResp,
             action_template: matchAction.name
         });
     } catch (error) {
-        console.log(error, 'ERRRR')
-        res.status(500).json({ error: error.message });
+        console.log(error, 'ERRRR',
+            error.details,
+            error.message,
+            error.name)
+
+        const formattedResponse = await aiService.formatResultsForUser(
+            error.details,
+            message,
+            error.name
+        );
+
+
+
+
+        return res.status(500).json({ message: formattedResponse });
     }
 });
 
@@ -148,6 +372,8 @@ router.post('/detect-action', async (req, res) => {
 
         // Step 1: Build the Ollama prompt
         const actionPrompt = aiService.buildOllamaPrompt(actionTemplates.map(a => { return { name: a.name, description: a.description, action: a.action_type, resource: a.target_resource_type.name } }), message)
+
+        console.log(actionPrompt, 'ACTION PROMPT')
 
         const ollamaResponse = await aiService.callOllama(actionPrompt);
 
@@ -170,134 +396,168 @@ router.post('/detect-action', async (req, res) => {
 
 
 router.post('/conversation', async (req, res) => {
-    const { voice } = req.query;
-    const { message, resource_type_id, conversation_id } = req.body;
+    let { voice } = req.query;
+    console.log(voice, 'VOICIE')
+
+    voice = voice == 'true' ? true : false
+    console.log(voice == true, 'VOICIE')
+    const { message, conversation_id } = req.body;
+
     let session = sessionManager.getSession(conversation_id);
-    let response = {
-        text: 'Hi There!'
-    }
+    // let session = sessionManager.getSession('session_420230');
+
+
+
+
     try {
-
-
-
 
         if (!session) {
             console.log('[Session] Creating new session');
             session = sessionManager.createSession(conversation_id);
-            // await agenticService.createConversation(session.id)
         } else {
             console.log(`[Session] Using existing session: ${session.id}`);
         }
 
 
+        if (session.status == 'confirmation') {
+
+            const { confirmed } = await generateAIResponse(session, message, { model: "alayon_confirmation" })
+
+
+            if (confirmed) {
+                // response = await handleAIResponse(session, session.query);
+                const confirmResult = await confirmOperation(session, 'yes');
+                console.log(confirmResult, 'CONFIRM RES', session)
+                const formattedResponse = await aiService.formatResultsForUser(
+                    session.results,
+                    session.lastMessage,
+                    'Provide short and precise description of the effect of the action from data context.'
+                );
+                session.status = '';
+                sessionManager.updateSession(session.id, session)
+
+                if (voice) {
+                    await voicespeak(formattedResponse);
+                }
+
+                return res.json({
+                    message: formattedResponse,
+                    session,
+                    sessionId: session.id,
+                    query: session.query
+
+                });
+            } else {
+                session.status = 'followup';
+            }
+        }
 
 
 
 
-        sessionManager.addHistory(session.id, {
-            role: 'user',
-            content: message
-        });
 
 
         let actionTemplates = await getActionTemplates();
 
+        const actionPrompt = aiService.buildOllamaPrompt(actionTemplates.map(a => { return { name: a.name, description: a.description, action: a.action_type, resource: a.target_resource_type.name } }), message)
+        console.log(actionPrompt, 'ACTION')
+        const ollamaResponse = await generateAIResponse(session, actionPrompt, { model: "alayon_action" })
+        console.log(ollamaResponse, 'OLLAMA RESPONSE')
 
-        const match = await findMatchAction(actionTemplates.map(a => a.name), message);
+
+        if (ollamaResponse?.action == 'clear') {
+            session = sessionManager.createSession(conversation_id);
+
+            const formattedResponse = await aiService.formatResultsForUser(
+                [],
+                message,
+                'Respond short message informing - "Data successfully cleared, you can now ask your next question."'
+            );
+            if (voice) {
+                await voicespeak(formattedResponse);
+            }
+            return res.json({
+                message: formattedResponse,
+                session,
+                sessionId: session.id,
+                query: session.query
+
+            });
+        }
 
 
-        console.log(match, 'MATCH')
-        if (match) {
-            session.resource_type_id = match.target_resource_type_id
-            session.template = match;
+        if (ollamaResponse?.resource) {
+            let resource = await findResourceByName(ollamaResponse?.resource);
+            session.resourceName = ollamaResponse?.resource
+            session.resourceId = resource.id
+            console.log(resource, 'RESOURCE ID')
+            sessionManager.updateSession(session.id, session)
 
         }
 
 
-        let resp = await agenticService.chat(session.id, message)
-
-
-
-        let agentResp = JSON.parse(resp.response);
-
-        // Handle initialization stage
-        // if (!session.organization || !session.resourceName) {
-        //     const result = await handleResourceSelection(message, session);
-
-        //     if (result.organization) {
-        //         session.organization = result.organization;
-        //     }
-        //     if (result.resourceName) {
-        //         session.resourceName = result.resourceName;
-        //         session.resource_type_id = result.resourceId;
-        //         session.template = result.template;
-        //     }
-
-        //     if (result.resourceFields) {
-        //         session.resourceFields = result.resourceFields
-        //     }
-
-
-        //     sessionManager.updateSession(session.id, session);
-        //     /*            sessionManager.addHistory(session.id, {
-        //                    role: 'assistant',
-        //                    content: result.followUp
-        //                });
-        //     */
-        //     // console.log(session, 'sssesss')
-        //     response.text = result.followUp;
-        //     /*            return res.json({
-        //                    conversation_id: session.id,
-        //                    response: {
-        //                        type: 'resource',
-        //                        text: result.followUp,
-        //                    },
-        //                    history: session.history
-        //                }); */
-        // }
 
 
 
 
 
 
-        /*        // Create or retrieve conversation
-               let conversation = conversation_id && conversations.get(conversation_id);
-               if (!conversation) {
-                   conversation = {
-                       history: [],
-                       resource_type_id
-                   };
-                   const newId = Date.now().toString();
-                   conversations.set(newId, conversation);
-                   conversation.id = newId;
-               } */
 
-        // Add user message to history
-        // conversation.history.push({ role: 'user', content: message });
 
-        // Generate AI response
-        if (session.resource_type_id && session.template) {
-            response = await handleAIResponse(session, agentResp);
+
+
+        // const conversation = getConversation(conversation_id);
+        const response = await processMessage(message, session);
+        console.log(response, 'RESP')
+        if (response.needsConfirmation) {
+            session.status = 'confirmation';
+            session.lastMessage = message;
+        } else {
+            session.status = 'followup'
+
         }
 
-        if (response && response.text && voice) {
-            await voicespeak(response.text);
-        }
+        // updateConversation(conversationId, conversation);
 
-
-        // Add AI response to history
-        session.history.push({ role: 'assistant', content: response });
-
+        const formattedResponse = await aiService.formatResultsForUser(
+            session.results,
+            message,
+            response.message
+        );
         sessionManager.updateSession(session.id, session)
 
-        res.json({
-            conversation_id: session.id,
-            response,
-            history: session.history
+        if (voice) {
+            await voicespeak(formattedResponse);
+        }
+
+        return res.status(200).json({
+            message: formattedResponse,
+            response: response,
+            session: session,
+            sessionId: session.id,
+            action: ollamaResponse
         });
     } catch (error) {
-        console.log(error, 'ERRRR')
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/confirm', async (req, res) => {
+    const { conversation_id, confirmation } = req.body;
+
+    try {
+        let session = sessionManager.getSession(conversation_id);
+        console.log(session, 'session')
+        if (!session) throw new Error('No pending operation');
+
+        // const conversation = getConversation(conversationId);
+        const result = await confirmOperation(session, confirmation);
+        // updateConversation(conversationId, conversation);
+        sessionManager.updateSession(session.id, session)
+
+
+        res.json({ message: result, sessionId: session.id });
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
@@ -375,7 +635,6 @@ async function handleAIResponse(conversation, query) {
         //         lastMessage,
         //         conversation.resource_type_id
         //     );
-        console.log(query, 'QUERY')
 
         /*        const { filterQuery } = await aiService.generateQueryFromNaturalLanguageConvo(
                    lastMessage,
@@ -397,9 +656,8 @@ async function handleAIResponse(conversation, query) {
         }
 
         // template.filterQuery = filter;
-
-        let parameters = query?.params;
-        let filter = query?.filter;
+        let parameters = query?.data;
+        let filter = query?.whereConditions;
         // Validate parameters against template requirements
         const validationErrors = [];
 
@@ -422,13 +680,13 @@ async function handleAIResponse(conversation, query) {
             paramName => !allowedParamNames.includes(paramName)
         );
 
-        if (extraParams.length > 0) {
-            validationErrors.push({
-                type: 'EXTRA_PARAMETERS',
-                message: 'Parameters not allowed by template',
-                details: extraParams
-            });
-        }
+        /*       if (extraParams.length > 0) {
+                  validationErrors.push({
+                      type: 'EXTRA_PARAMETERS',
+                      message: 'Parameters not allowed by template',
+                      details: extraParams
+                  });
+              } */
 
         // 3. Validate parameter values against allowed fields (if template has field restrictions)
         // if (template.allowed_fields && template.allowed_fields.length > 0) {
@@ -470,6 +728,8 @@ async function handleAIResponse(conversation, query) {
             }
         }
 
+
+
         // Return validation errors if any
         if (validationErrors.length > 0) {
             /*       return res.status(400).json({
@@ -486,8 +746,9 @@ async function handleAIResponse(conversation, query) {
         }
 
 
-        console.log('EXECUTE', template)
-        const results = await executeTemplate(template, parameters, filter);
+
+        const results = await actionTemplateService.executeTemplate(template.name, parameters, filter);
+
 
         // Format results for user
         const formattedResponse = await aiService.formatResultsForUser(
@@ -529,102 +790,6 @@ Please respond precisely and helpfully, explaining the issue in non-technical wa
     }
 }
 
-async function handleResourceSelection(prompt, session) {
-    const updates = {};
-    let followUp;
-    // const orgs = await getOrganizations();
-    const resrcs = await getResourceTypes();
 
-    // if (!session.organization) {
-    //     const { value, feedback, suggestions } = await extractOrganization(prompt);
-    //     console.log(orgs, 'orgss', value, feedback, suggestions)
-    //     if (value) {
-    //         updates.organization = value;
-    //         followUp = `${feedback}\nWhich resource in ${value}?`;
-    //     } else {
-    //         followUp = `${feedback}\nAvailable organizations: ${orgs.join(', ')}` +
-    //             (suggestions?.length ? `\nDid you mean: ${suggestions.join(', ')}` : '');
-    //     }
-    // }
-
-    // else 
-    const { value, feedback, confidence } = await extractResourceName(prompt, resrcs);
-    let resource = await findResourceByName(value)
-
-    if (value && resource) {
-
-        updates.resourceFields = resource?.fields
-        updates.resourceName = value;
-        updates.resourceId = resource.id
-        updates.resource = resource;
-
-
-
-    } else {
-        followUp = `${feedback}\n${resrcs.length ? `Available resources: ${resrcs.join(', ')}` : ''}`;
-    }
-
-
-
-    if (resource.action_templates) {
-        let actions = resource.action_templates.map(a => a.name)
-
-
-        const match = await findMatchAction(actions, prompt);
-        console.log(match, 'matchs')
-        updates.resourceId = resource.id
-
-        if (match) {
-            let action_template = await findActionTemplateByName(match);
-            updates.template = action_template;
-        } else {
-            followUp = `Action not allowed for Resource ${value}?\nAvailable actions:\n ${JSON.stringify(actions)}`;
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    } else {
-        followUp = `No Actions allowed in this resources. Can I help you with another else?`;
-    }
-
-
-
-
-    // const updatedSession = await sessionStore.updateSession(session._id, {
-    //     ...updates,
-    //     userInput: prompt,
-    //     followUp
-    // });
-
-
-    return {
-        sessionId: session.id,
-        // ...updatedSession.state,
-        ...updates,
-        followUp,
-    };
-}
 
 export default router;

@@ -7,7 +7,8 @@
   "scripts": {
     "test": "nodemon test.js",
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "seeder": "node ./seeder/seedAi.js"
   },
   "author": "John Benedict Geli",
   "license": "ISC",
@@ -20,9 +21,11 @@
     "express": "^5.1.0",
     "express-session": "^1.18.1",
     "form-data": "^4.0.3",
+    "ioredis": "^5.6.1",
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "natural": "^8.1.0",
+    "node-cron": "^4.2.0",
     "ollama": "^0.5.16",
     "pg": "^8.16.2",
     "pg-hstore": "^2.3.4",

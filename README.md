@@ -1,0 +1,1 @@
+ollama create alayon -f .\tuner\alayon-postgres

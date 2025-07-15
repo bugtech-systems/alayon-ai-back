@@ -24,6 +24,9 @@ export default ({ sequelize }, DataTypes) => {
         description: {
             type: DataTypes.TEXT
         },
+        label: {
+            type: DataTypes.TEXT
+        },
         options_resource_type: {
             type: DataTypes.STRING(255)
         },

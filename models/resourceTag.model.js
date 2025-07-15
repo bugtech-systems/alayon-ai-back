@@ -6,7 +6,7 @@ export default ({ sequelize }, DataTypes) => {
             autoIncrement: true
         },
         type: {
-            type: DataTypes.ENUM('resource', 'config', 'connections'),
+            type: DataTypes.ENUM('resource', 'config', 'connections', 'tag'),
             allowNull: false,
             defaultValue: 'resource'
         },

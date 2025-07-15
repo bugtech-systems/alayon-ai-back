@@ -40,7 +40,6 @@ export const calculateConfidence = (result, context) => {
 export const generateFieldPrompt = (fieldName) => {
     const field = resourceConfig.fields.find(f => f.fieldName === fieldName);
 
-    console.log('genFFF', field, fieldName)
     if (!field) return `Please provide a value for ${fieldName}`;
 
     return `${field.name} (${field.fieldName}) is required. ` +
@@ -61,7 +60,6 @@ export async function extractOrganization(prompt, session) {
     const orgs = await getOrganizations();
 
     const { match, message, suggestions } = await findBestMatch(orgs, prompt, session);
-    console.log(match, message, suggestions, session, 'extract org', orgs, prompt, session)
     return {
         value: match,
         feedback: message || (match
@@ -74,7 +72,6 @@ export async function extractOrganization(prompt, session) {
 export async function extractResourceName(prompt, resources) {
 
 
-    console.log(resources, 'RES')
     const { match, confidence } = await findBestMatch(resources, prompt);
     return {
         value: match,

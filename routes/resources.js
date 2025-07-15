@@ -102,7 +102,7 @@ router.post('/', async (req, res) => {
     const { relationship } = req.query;
     const transaction = await db.sequelize.transaction();
     try {
-        const { name, attributes } = req.body;
+        const { name, attributes, relationships } = req.body;
 
         if (!name) {
             await transaction.rollback();
@@ -129,12 +129,11 @@ router.post('/', async (req, res) => {
 
         let validateResource = await ResourceApiService.validateResourceAttributes(attributes, name, transaction);
 
-        console.log(validateResource, 'VALIDATE RESOURCE')
 
 
-
+        console.log({ name: String(name).toLowerCase(), attributes, relationships }, 'CREATE RESOURCE')
         const resource = await resourceService.createResource(
-            { name: String(name).toLowerCase(), attributes },
+            { name: String(name).toLowerCase(), attributes, relationships },
             transaction
         );
 
@@ -177,25 +176,6 @@ router.post('/', async (req, res) => {
     }
 });
 
-router.get('/type/:typeId', async (req, res, next) => {
-    try {
-        const { relationship } = req.query;
-
-        const resources = await resourceService.getResourcesByType(req.params.typeId);
-        console.log(resources, 'resources')
-        const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues, relationship));
-
-        return res.status(200).json({
-            data: formattedResources,
-            meta: {
-                count: formattedResources.length
-            }
-        });
-    } catch (error) {
-        next(error);
-    }
-});
-
 router.get('/:id', async (req, res, next) => {
     try {
         const { relationship } = req.query;
@@ -210,6 +190,40 @@ router.get('/:id', async (req, res, next) => {
             });
         }
         return res.status(200).json(formatResourceResponse(resource, relationship));
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/type/:typeId', async (req, res, next) => {
+    try {
+
+        const resources = await resourceService.getResourcesByType(req.params.typeId);
+        const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues));
+
+        return res.status(200).json({
+            data: formattedResources,
+            meta: {
+                count: formattedResources.length
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/type/:typeId/:relationship', async (req, res, next) => {
+    try {
+
+        const resources = await resourceService.getResourcesByType(req.params.typeId);
+        const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues, req.params.relationship));
+
+        return res.status(200).json({
+            data: formattedResources,
+            meta: {
+                count: formattedResources.length
+            }
+        });
     } catch (error) {
         next(error);
     }

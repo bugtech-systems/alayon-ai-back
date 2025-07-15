@@ -1,5 +1,7 @@
 
 import { Ollama } from 'ollama';
+import aiService from './aiServices.js';
+import { findResourceByName, getResourceOptions, getResourceTypes } from './ResourceService.js';
 
 // Initialize Ollama client
 const ollamaClient = new Ollama({
@@ -191,13 +193,10 @@ export default class AgenticAIService {
     async addUserMessage(conversationId, content, metadata = {}) {
         try {
 
-            console.log(conversationId, 'convers')
             const conversation = await this.getConversationsById(conversationId);
             if (!conversation) {
                 throw new Error('Conversation not found');
             }
-
-            console.log(conversation, 'CONVO', this.models)
 
             const message = await this.models.Message.create({
                 role: 'user',
@@ -219,38 +218,68 @@ export default class AgenticAIService {
         }
     }
 
-    async generateAIResponse(session, prompt, options = {}) {
+    async generateAIResponse(session, prompt, options = {
+        temperature: 0.2,
+        num_ctx: 4096
+    }) {
         try {
-            const conversations = await this.getConversationsById(session.id, true);
+            // const conversations = await this.getConversationsById(session.id, true);
             /*      if (!conversations || conversations.length) {
                      throw new Error('Conversation not found');
                  } */
+            let formatInstructions = session.template?.ai_config
+            let formatCondition = session.template?.conditions
+            let resourceName = session.resourceName;
+            let context = session?.context;
+            let today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
 
+            console.log(resourceName, 'resourceName')
+            let resource = await findResourceByName(resourceName);
+            console.log(resource, 'resource')
+
+            let selectFields = resource?.fields.filter(a => a.data_type == 'select').map(a => a.options_resource_type);
+            let options = await getResourceOptions(selectFields);
+
+            const userPrompt = `
+            Available Fields: ${session.template?.parameters.map(a => a.name).join(', ')}
+            Field Options: ${JSON.stringify(options, null, 2)}
+            RESOURCE NAME: ${resourceName}
+            PREVIOUS CONTEXT: ${JSON.stringify(context, null, 2)}
+            QUERY CONDITION: ${JSON.stringify(formatCondition, null, 2)}
+            
+            
+            Input Text: ${prompt}
+            
+            Additional Instructions:
+            - Consider previous context if available.
+            ${formatInstructions ? `- ${formatInstructions}` : ''}
+            - Select only from Field Options the Allowed value for fields with Options.
+            - for date reference, date today is ${new Date(today).toISOString()}
+        }
+            `.trim();
+
+
+
+            const conversations = session.history;
 
             // Prepare messages for Mistral
             const messages = [];
+
             conversations.map(m => {
                 messages.push({
-                    role: 'user',
-                    content: m.prompt
-                })
-                messages.push({
-                    role: 'assistant',
-                    content: m.response
+                    role: m.role,
+                    content: m.content
                 })
             });
 
             messages.push({
                 role: 'user',
-                content: prompt
+                content: userPrompt
             })
-
-            console.log(conversations, 'MESS', session, messages)
-
 
             // Generate AI response
             const response = await ollamaClient.chat({
-                model: 'alayon',
+                model: 'alayon_pg',
                 messages,
                 format: 'json',
                 options: {
@@ -258,11 +287,13 @@ export default class AgenticAIService {
                 },
             });
 
-            let resJson = JSON.parse(response.message.content)
 
+
+            let resJson = JSON.parse(response.message.content)
             // Save AI response
             const aiMessage = await this.models.Conversation.create({
-                prompt: prompt,
+                title: 'alayon_pg',
+                prompt: userPrompt,
                 response: response.message.content,
                 sessionId: session.id,
                 metadata: resJson,
@@ -272,7 +303,6 @@ export default class AgenticAIService {
 
             // Update conversation timestamp
             // await conversation.update({ updatedAt: new Date() });
-            console.log(response, 'ai respss', prompt)
             return aiMessage;
         } catch (error) {
             console.error('Error generating AI response:', error);
@@ -280,7 +310,7 @@ export default class AgenticAIService {
         }
     }
 
-    async chat(conversationId, userMessage, options = {}) {
+    async chat(session, userMessage, options = {}) {
         try {
             // Add user message
             // await this.addUserMessage(conversationId, userMessage, options);
@@ -289,7 +319,7 @@ export default class AgenticAIService {
 
 
             // Generate AI response
-            const aiMessage = await this.generateAIResponse(conversationId, userMessage, options);
+            const aiMessage = await this.generateAIResponse(session, userMessage, options);
 
 
 
@@ -298,7 +328,6 @@ export default class AgenticAIService {
 
 
 
-            console.log(aiMessage, 'AI RESP')
 
 
 
@@ -334,12 +363,12 @@ export default class AgenticAIService {
         try {
             const messages = await this.getConversationMessages(conversationId);
             const conversationText = messages
-                .map(m => `${m.role}: ${m.content}`)
+                .map(m => `${m.role}: ${m.content} `)
                 .join('\n');
 
             const response = await ollamaClient.generate({
                 model: 'mistral',
-                prompt: `Summarize this conversation in 2-3 sentences:\n\n${conversationText}`,
+                prompt: `Summarize this conversation in 2 - 3 sentences: \n\n${conversationText} `,
                 options: {
                     temperature: 0.3,
                 },
@@ -356,12 +385,12 @@ export default class AgenticAIService {
         try {
             const messages = await this.getConversationMessages(conversationId);
             const conversationText = messages
-                .map(m => `${m.role}: ${m.content}`)
+                .map(m => `${m.role}: ${m.content} `)
                 .join('\n');
 
             const response = await ollamaClient.generate({
                 model: 'mistral',
-                prompt: `Based on this conversation, suggest 3-5 next steps the user might take:\n\n${conversationText}`,
+                prompt: `Based on this conversation, suggest 3 - 5 next steps the user might take: \n\n${conversationText} `,
                 options: {
                     temperature: 0.5,
                 },

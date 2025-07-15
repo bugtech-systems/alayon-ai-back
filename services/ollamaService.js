@@ -536,7 +536,6 @@ ${options.map((opt, i) => `[${i + 1}] "${opt.name}": ${opt.description || "No de
         });
 
         const result = JSON.parse(response.response);
-        console.log(prompt, 'PROMPT', result)
 
         if (result.match) {
             let action = await findActionTemplateByName(result.match)
