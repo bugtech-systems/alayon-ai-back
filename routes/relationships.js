@@ -31,12 +31,12 @@ const router = express.Router();
 router.post('/', async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
     try {
-        const { source_resource_id, target_resource_id, relationship_type, attributes } = req.body;
+        const { source_resource_id, target_resource_id, relationship_type, relationship_name, attributes } = req.body;
 
         // Validate input
-        if (!source_resource_id || !target_resource_id || !relationship_type) {
+        if (!source_resource_id || !target_resource_id || !relationship_name) {
             await transaction.rollback();
-            return res.status(400).json({ error: 'Source resource ID, target resource ID, and relationship type are required' });
+            return res.status(400).json({ error: 'Source resource ID, target resource ID, and relationship name are required' });
         }
 
         if (source_resource_id === target_resource_id) {
@@ -59,6 +59,7 @@ router.post('/', async (req, res, next) => {
             source_resource_id,
             target_resource_id,
             relationship_type,
+            relationship_name,
             attributes,
             is_active: true
         }, { transaction });

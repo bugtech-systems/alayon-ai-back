@@ -1,3 +1,7 @@
+import { where } from 'sequelize';
+import { db } from '../models/index.js';
+
+
 const sessions = new Map();
 
 // Cleanup expired sessions every minute
@@ -18,9 +22,13 @@ const sessions = new Map();
 // }, 60 * 1000);
 
 export const sessionManager = {
-    createSession() {
-        const sessionId = generateId();
+    async createSession(id) {
+        const sessionId = id || generateId();
         // const sessionId = 'session_420230'
+
+        let conversation = await db.Conversation.create({
+            session_id: sessionId
+        });
 
         const session = {
             id: sessionId,
@@ -33,26 +41,42 @@ export const sessionManager = {
             createdAt: new Date(),
             expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min session
             history: [],
-            status: 'followup'
+            status: 'followup',
+            conversation_id: conversation.id
         };
+
+
+
+        console.log(conversation, 'connvv')
+        conversation.metadata = session;
+        await conversation.save()
         sessions.set(sessionId, session);
         console.log(`[Session] Created new session: ${sessionId}`);
         return session;
     },
 
-    getSession(sessionId) {
+    async getSession(sessionId) {
         // console.log(`[Session] Looking up session: ${sessionId}`);
-        const session = sessions.get(sessionId);
-        if (session) {
+        let session = sessions.get(sessionId);
+
+        // let session = conversation?.metadata;
+        console.log(session, 'sss')
+        if (session && session?.id) {
             session.lastAccessed = Date.now();
             // console.log(`[Session] Session found: ${JSON.stringify(session, null, 2)}`);
+
+            // let conversation = await db.Conversation.findOne({
+            //     where: { session_id: sessionId, ai_preset_id: session.ai_preset_id },
+            // });
         } else {
             console.log(`[Session] Session not found: ${sessionId}`);
+            session = undefined
         }
+        console.log(session, 'sesss')
         return session;
     },
 
-    updateSession(sessionId, updates) {
+    async updateSession(sessionId, updates) {
 
         // console.log(`[Session] Updating session ${sessionId} with: ${JSON.stringify(updates)}`);
         const session = this.getSession(sessionId);
@@ -63,6 +87,13 @@ export const sessionManager = {
 
         Object.assign(session, updates);
         session.lastAccessed = Date.now();
+
+        let newUpdates = { metadata: updates }
+        if (updates.ai_preset_id) {
+            newUpdates.ai_preset_id = updates.ai_preset_id
+        }
+
+        await db.Conversation.update(newUpdates, { where: { session_id: sessionId } })
         // console.log(`[Session] Updated session state: ${JSON.stringify(session, null, 2)}`);
         return session;
     },

@@ -1,34 +1,243 @@
 // scripts/seedAiDescriptions.js
 import { db, initializeDatabase } from '../models/index.js';
-import { Sequelize } from 'sequelize';
+import { Sequelize, where } from 'sequelize';
+import { config, action_templates } from '../configs/default_resource.js';
+import { DEFAULT_MODELS } from '../configs/default_models.js'
+import { getActionTemplates } from '../services/ActionTemplateService.js';
+import { getResourcesByType } from '../services/ResourceService.js';
 
 
+async function seedResources() {
+    try {
+        for (const resourceConfig of config) {
+            const transaction = await db.sequelize.transaction();
 
+            try {
+                const { resource_name, fields } = resourceConfig;
 
-async function seedResourceDescriptions() {
-    const resources = await db.ResourceTag.findAll({ where: { type: 'config' } });
+                // Check if resource already exists (case-insensitive)
+                const existingResource = await db.ResourceTag.findOne({
+                    where: Sequelize.where(
+                        Sequelize.fn('lower', Sequelize.col('resource_name')),
+                        Sequelize.fn('lower', resource_name)
+                    ),
+                    transaction
+                });
 
-    for (const resource of resources) {
-        const fields = await db.ResourceField.findAll({
-            where: { resource_tag_id: resource.id }
-        });
+                if (existingResource) {
+                    console.log(`Resource "${resource_name}" already exists, skipping...`);
+                    await transaction.rollback();
+                    continue;
+                }
 
-        const fieldDescriptions = fields.map(f =>
-            `${f.field_name}: ${f.description || f.data_type + ' field'}`
-        ).join(', ');
+                // Create the resource
+                const resourceType = await db.ResourceTag.create({
+                    resource_type: 'config',
+                    resource_name: String(resource_name).toLowerCase()
+                }, { transaction });
 
-        await resource.update({
-            ai_description: `A ${resource.name} resource with fields: ${fieldDescriptions}`,
-            ai_example_queries: [
-                `Show me all ${resource.name} records`,
-                `How many ${resource.name} are there?`,
-                `List ${resource.name} created last week`,
-                `Find ${resource.name} with specific criteria`
-            ]
-        });
+                // Create fields if they exist
+                if (fields && fields.length > 0) {
+                    await Promise.all(
+                        fields.map(field =>
+                            db.ResourceField.create({
+                                ...field,
+                                resource_tag_id: resourceType.id
+                            }, { transaction })
+                        )
+                    );
+
+                    // Reload with fields
+                    await resourceType.reload({
+                        include: ['fields'],
+                        transaction
+                    });
+                }
+
+                await transaction.commit();
+                console.log(`Successfully created resource "${resource_name}" with ${fields.length} fields`);
+            } catch (error) {
+                // Only rollback if transaction hasn't completed
+                if (transaction.finished !== 'commit') {
+                    await transaction.rollback();
+                }
+                console.error(`Error creating resource "${resourceConfig.resource_name}":`, error.message);
+            }
+        }
+
+        console.log('Resource seeding completed');
+    } catch (error) {
+        console.error('Error during resource seeding:', error);
     }
+}
 
-    console.log('AI descriptions updated for all resources');
+async function seedAiPreset() {
+    try {
+
+
+
+
+
+
+
+
+
+
+
+        for (let aiConfig of DEFAULT_MODELS) {
+            const transaction = await db.sequelize.transaction();
+
+            try {
+                let { name, parameters, options, ...moreData } = aiConfig;
+
+                console.log(name, 'MOD')
+
+                if (name == 'action_selector') {
+                    let actionTemplates = await getActionTemplates();
+                    const resource_names = await getResourcesByType();
+                    const allowedTemplates = actionTemplates.map(t => ({
+                        name: t.name,
+                        description: t.description,
+                        // samples: t.samples.slice(0, 3) // Limit to 3 samples
+                    }));
+                    const allowed_resource_names = resource_names.map(a => a.resource_name)
+
+                    options = {
+                        ...options,
+                        action_templates: allowedTemplates,
+                        resource_name: allowed_resource_names
+                    }
+                }
+
+                if (name == 'template_engine') {
+                    const resource_names = await getResourcesByType();
+                    const allowed_resource_names = resource_names.map(a => a.resource_name)
+
+                    options = {
+                        ...options,
+                        // action_templates: allowedTemplates,
+                        resource_name: allowed_resource_names
+                    }
+                }
+
+
+
+
+
+
+
+                // Check if resource already exists (case-insensitive)
+                const existingResource = await db.AiPreset.findOne({
+                    where: Sequelize.where(
+                        Sequelize.fn('lower', Sequelize.col('name')),
+                        Sequelize.fn('lower', name)
+                    ),
+                    transaction
+                });
+
+                if (existingResource) {
+                    console.log(`Ai Preset "${name}" already exists, skipping...`);
+                    await db.AiPreset.update({ ...moreData, options }, { where: { id: existingResource.id } })
+                    // await transaction.rollback();
+                    await transaction.commit();
+
+                    continue;
+                }
+
+                console.log(aiConfig, 'confff')
+
+                // Create the resource
+                await db.AiPreset.create({
+                    ...aiConfig,
+                    name: aiConfig.name,
+                    base_model: aiConfig.base_model,
+                    parameters,
+                    options,
+                    system_instruction: aiConfig.system_instruction
+                }, { transaction });
+
+
+                await transaction.commit();
+                console.log(`Successfully created ai preset "${name}".`);
+            } catch (error) {
+                // Only rollback if transaction hasn't completed
+                if (transaction.finished !== 'commit') {
+                    await transaction.rollback();
+                }
+                console.error(`Error creating resource "${aiConfig.name}":`, error.message);
+            }
+        }
+
+        console.log('Ai Preset seeding completed');
+    } catch (error) {
+        console.error('Error during resource seeding:', error);
+    }
+}
+
+async function seedActionTemplates() {
+    try {
+        for (const template of action_templates) {
+            const transaction = await db.sequelize.transaction();
+
+            try {
+                const { name, parameters, ...moreData } = template;
+
+                // Check if resource already exists (case-insensitive)
+                const existingResource = await db.ActionTemplate.findOne({
+                    where: Sequelize.where(
+                        Sequelize.fn('lower', Sequelize.col('name')),
+                        Sequelize.fn('lower', name)
+                    ),
+                    transaction
+                });
+
+                if (existingResource) {
+                    console.log(`Resource "${name}" already exists, skipping...`);
+
+                    await transaction.rollback();
+                    continue;
+                }
+
+                // Create the resource
+                const resourceType = await db.ActionTemplate.create({
+                    name,
+                    parameters,
+                    ...moreData
+                }, { transaction });
+
+                // Create fields if they exist
+                // if (fields && fields.length > 0) {
+                //     await Promise.all(
+                //         fields.map(field =>
+                //             db.ResourceField.create({
+                //                 ...field,
+                //                 resource_tag_id: resourceType.id
+                //             }, { transaction })
+                //         )
+                //     );
+
+                //     // Reload with fields
+                //     await resourceType.reload({
+                //         include: ['fields'],
+                //         transaction
+                //     });
+                // }
+                console.log(resourceType)
+                await transaction.commit();
+                console.log(`Successfully created resource "${name}" with ${parameters.length} fields`);
+            } catch (error) {
+                // Only rollback if transaction hasn't completed
+                if (transaction.finished !== 'commit') {
+                    await transaction.rollback();
+                }
+                console.error(`Error creating resource "${template.name}":`, error.message);
+            }
+        }
+
+        console.log('Resource seeding completed');
+    } catch (error) {
+        console.error('Error during resource seeding:', error);
+    }
 }
 
 async function seedCRUDActionTemplates() {
@@ -36,16 +245,16 @@ async function seedCRUDActionTemplates() {
     try {
         const resources = await db.ResourceTag.findAll({
             where: {
-                type: 'config',
-                name: {
-                    [Sequelize.Op.notIn]: [
-                        'tasks_priority',
-                        'user_status',
-                        'tasks_label',
-                        'tasks_status',
-                        'roles'
-                    ]
-                }
+                resource_type: 'config',
+                // resource_name: {
+                //     [Sequelize.Op.notIn]: [
+                //         'tasks_priority',
+                //         'user_status',
+                //         'tasks_label',
+                //         'tasks_status',
+                //         'roles'
+                //     ]
+                // }
             },
             include: [{
                 model: db.ResourceField,
@@ -56,7 +265,7 @@ async function seedCRUDActionTemplates() {
         });
 
 
-
+        if (!resources.length) return;
 
         for (const resource of resources) {
             let baseParameters = [];
@@ -82,8 +291,8 @@ async function seedCRUDActionTemplates() {
             // CRUD Templates to create
             const crudTemplates = [
                 {
-                    name: `create_${resource.name}`,
-                    description: `Create a new ${resource.name} record`,
+                    name: `create_${resource.resource_name}`,
+                    description: `Create a new ${resource.resource_name} record`,
                     action_type: 'create',
                     target_resource_type_id: resource.id,
                     field_mappings: resource.fields.reduce((acc, field) => {
@@ -93,8 +302,8 @@ async function seedCRUDActionTemplates() {
                     parameters: baseParameters.map(p => ({ ...p, required: false })) // All fields required for create
                 },
                 {
-                    name: `read_${resource.name}`,
-                    description: `Query ${resource.name} records with filters`,
+                    name: `read_${resource.resource_name}`,
+                    description: `Query ${resource.resource_name} records with filters`,
                     action_type: 'read',
                     target_resource_type_id: resource.id,
                     conditions: resource.fields.reduce((acc, field) => {
@@ -104,8 +313,8 @@ async function seedCRUDActionTemplates() {
                     parameters: baseParameters
                 },
                 {
-                    name: `update_${resource.name}`,
-                    description: `Update existing ${resource.name} records`,
+                    name: `update_${resource.resource_name}`,
+                    description: `Update existing ${resource.resource_name} records`,
                     action_type: 'update',
                     target_resource_type_id: resource.id,
                     conditions: {
@@ -128,8 +337,8 @@ async function seedCRUDActionTemplates() {
                     ]
                 },
                 {
-                    name: `delete_${resource.name}`,
-                    description: `Delete ${resource.name} records`,
+                    name: `delete_${resource.resource_name}`,
+                    description: `Delete ${resource.resource_name} records`,
                     action_type: 'delete',
                     target_resource_type_id: resource.id,
                     conditions: {
@@ -145,8 +354,8 @@ async function seedCRUDActionTemplates() {
                     ]
                 },
                 {
-                    name: `count_${resource.name}`,
-                    description: `Count ${resource.name} records with optional filters`,
+                    name: `count_${resource.resource_name}`,
+                    description: `Count ${resource.resource_name} records with optional filters`,
                     action_type: 'read',
                     target_resource_type_id: resource.id,
                     conditions: resource.fields.reduce((acc, field) => {
@@ -195,9 +404,10 @@ const syncDatabase = async () => {
     try {
         initializedDb = await initializeDatabase();
         console.log('Database initialized successfully');
-        seedResourceDescriptions();
-
-        seedCRUDActionTemplates();
+        // await seedResources();
+        await seedActionTemplates()
+        await seedAiPreset()
+        // await seedCRUDActionTemplates();
     } catch (error) {
         console.error('Failed to initialize database:', error);
         process.exit(1); // Exit if database fails to initialize

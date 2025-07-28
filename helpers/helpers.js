@@ -171,6 +171,11 @@ export function generateId() {
         Math.random().toString(36).substring(2, 15);
 }
 
+// Unique ID generator for executions
+export const generateExecutionId = () =>
+    `exec_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+
 // // Example usage:
 // const complexObj = {
 //     name: "John",

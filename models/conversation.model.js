@@ -5,33 +5,15 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
-
-        rate: {
-            type: DataTypes.INTEGER,
-            defaultValue: 0
-        },
-        title: {
-            type: DataTypes.STRING(255),
-            allowNull: false,
-            defaultValue: 'New Conversation'
-        },
-        prompt: {
-            type: DataTypes.TEXT,
-            allowNull: false
-        },
-        response: {
-            type: DataTypes.TEXT,
-            allowNull: false
+        context: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
         },
         metadata: {
             type: DataTypes.JSONB,
             defaultValue: {}
         },
-        tokens: {
-            type: DataTypes.INTEGER,
-            defaultValue: 0
-        },
-        sessionId: {
+        session_id: {
             type: DataTypes.STRING(255),
         },
         created_at: {

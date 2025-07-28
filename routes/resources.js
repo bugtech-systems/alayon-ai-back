@@ -23,16 +23,16 @@ const formatResourceResponse = (resource, connection) => {
 
 
             const relatedResource = relationship.target_resource || relationship.source_resource;
-            if (relatedResource && (String(relatedResource.name).toLowerCase() == String(connection).toLowerCase())) {
-                if (!formattedRelationships[relatedResource.name]) {
-                    formattedRelationships[relatedResource.name] = [];
+            if (relatedResource && (String(relatedResource.resource_name).toLowerCase() == String(connection).toLowerCase())) {
+                if (!formattedRelationships[relatedResource.resource_name]) {
+                    formattedRelationships[relatedResource.resource_name] = [];
                 }
 
 
-                formattedRelationships[relatedResource.name].push({
+                formattedRelationships[relatedResource.resource_name].push({
                     id: relatedResource.id,
-                    type: 'resource',
-                    name: relatedResource.name,
+                    resource_type: 'resource',
+                    resource_name: relatedResource.resource_name,
                     attributes: { ...relatedResource.attributes },
                     is_deleted: relatedResource.is_deleted,
                     is_active: relatedResource.is_active,
@@ -41,7 +41,8 @@ const formatResourceResponse = (resource, connection) => {
                     // Include relationship-specific attributes if needed
                     relationship_attributes: {
                         created_at: relationship.created_at,
-                        updated_at: relationship.updated_at
+                        updated_at: relationship.updated_at,
+                        ...relationship.attributes
                     }
                 });
             }
@@ -54,15 +55,15 @@ const formatResourceResponse = (resource, connection) => {
 
 
             const relatedResource = relationship.target_resource || relationship.source_resource;
-            if (relatedResource && (String(relatedResource.name).toLowerCase() == String(connection).toLowerCase())) {
-                if (!formattedRelationships[relatedResource.name]) {
-                    formattedRelationships[relatedResource.name] = [];
+            if (relatedResource && (String(relatedResource.resource_name).toLowerCase() == String(connection).toLowerCase())) {
+                if (!formattedRelationships[relatedResource.resource_name]) {
+                    formattedRelationships[relatedResource.resource_name] = [];
                 }
 
-                formattedRelationships[relatedResource.name].push({
+                formattedRelationships[relatedResource.resource_name].push({
                     id: relatedResource.id,
-                    type: 'resource',
-                    name: relatedResource.name,
+                    resource_type: 'resource',
+                    resource_name: relatedResource.resource_name,
                     attributes: { ...relatedResource.attributes },
                     is_deleted: relatedResource.is_deleted,
                     is_active: relatedResource.is_active,
@@ -80,8 +81,8 @@ const formatResourceResponse = (resource, connection) => {
 
     return {
         id: resource.id,
-        type: 'resource',
-        name: resource.name,
+        resource_type: 'resource',
+        resource_name: resource.resource_name,
         attributes: {
             ...resource.attributes,
             // Explicitly exclude relationships to avoid circular references
@@ -102,9 +103,9 @@ router.post('/', async (req, res) => {
     const { relationship } = req.query;
     const transaction = await db.sequelize.transaction();
     try {
-        const { name, attributes, relationships } = req.body;
+        const { resource_name, attributes, relationships } = req.body;
 
-        if (!name) {
+        if (!resource_name) {
             await transaction.rollback();
             return res.status(400).json({
                 error: {
@@ -127,13 +128,11 @@ router.post('/', async (req, res) => {
         //Validate of resource-type exists.
 
 
-        let validateResource = await ResourceApiService.validateResourceAttributes(attributes, name, transaction);
 
 
 
-        console.log({ name: String(name).toLowerCase(), attributes, relationships }, 'CREATE RESOURCE')
         const resource = await resourceService.createResource(
-            { name: String(name).toLowerCase(), attributes, relationships },
+            { resource_name: String(resource_name).toLowerCase(), attributes, relationships },
             transaction
         );
 

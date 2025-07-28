@@ -34,19 +34,21 @@ router.post('/', async (req, res) => {
     const transaction = await db.sequelize.transaction();
 
     try {
-        const { name, fields } = req.body;
+        const { resource_name, fields } = req.body;
 
-        if (!name || !fields) {
+
+        console.log(fields, resource_name, 'rssss')
+        if (!resource_name || !fields) {
             await transaction.rollback();
-            return res.status(400).json({ error: 'Resource name is required' });
+            return res.status(400).json({ error: 'resource_name is required' });
         }
 
 
         // Case-insensitive check for existing resource with same name and parent
         const existingResource = await db.ResourceTag.findOne({
             where: Sequelize.where(
-                Sequelize.fn('lower', Sequelize.col('name')),
-                Sequelize.fn('lower', name)
+                Sequelize.fn('lower', Sequelize.col('resource_name')),
+                Sequelize.fn('lower', resource_name)
             ),
             transaction
         });
@@ -57,16 +59,16 @@ router.post('/', async (req, res) => {
                 error: 'Resource with this name already exists',
                 existingResource: {
                     id: existingResource.id,
-                    name: existingResource.name,
-                    type: existingResource.type
+                    resource_name: existingResource.resource_name,
+                    resource_type: existingResource.resource_type
                 }
             });
         }
 
 
         const resourceType = await db.ResourceTag.create({
-            type: 'config',
-            name: String(name).toLowerCase()
+            resource_type: 'config',
+            resource_name: String(resource_name).toLowerCase()
         }, { transaction });
 
         if (fields && fields.length > 0) {
@@ -93,7 +95,6 @@ router.post('/', async (req, res) => {
         if (transaction.finished !== 'commit') {
             await transaction.rollback();
         }
-        console.log(error, 'ERROR')
         res.status(400).json({ error: error.message });
     }
 });
@@ -111,17 +112,11 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res, next) => {
     try {
         const resourceTypes = await db.ResourceTag.findAll({
-            where: { type: 'config', is_deleted: false },
+            where: { resource_type: 'config', is_deleted: false },
             include: [
                 {
                     model: db.ResourceField,
                     as: 'fields',
-                    include: [{
-                        model: db.FieldExample,
-                        as: 'examples',
-                        where: { is_deleted: false },
-                        required: false
-                    }],
                     where: { is_deleted: false },
                     required: false
                 }
@@ -158,59 +153,44 @@ router.get('/', async (req, res, next) => {
 router.get('/:identifier', async (req, res, next) => {
     try {
         const { identifier } = req.params;
-
+        let options = {}
         // Determine if identifier is numeric (ID) or string (name)
-        const isNumericId = /^\d+$/.test(identifier);
 
-        const whereCondition = isNumericId
-            ? { id: identifier }
-            : {
-                name: db.sequelize.where(
-                    db.sequelize.fn('LOWER', db.sequelize.col('name')),
+        if (!identifier) {
+            return null
+        }
+
+        if (Number.isInteger(identifier) || /^\d+$/.test(identifier)) {
+            // If identifier is a number, use it directly as parent ID
+            options = { id: identifier }
+        } else {
+            options = {
+                resource_name: db.sequelize.where(
+                    db.sequelize.fn('LOWER', db.sequelize.col('resource_name')),
                     '=',
                     identifier.toLowerCase()
                 )
-            };
+            }
+        }
+
+
 
         const resourceType = await db.ResourceTag.findOne({
             where: {
-                ...whereCondition,
+                ...options,
                 is_deleted: false,
-                type: 'config' // Ensure it's a config type as per your original check
+                resource_type: 'config' // Ensure it's a config type as per your original check
             },
             include: [
                 {
                     model: db.ResourceField,
                     as: 'fields',
-                    where: { is_deleted: false },
-                    required: false,
-                    include: [{
-                        model: db.FieldExample,
-                        as: 'examples',
-                        where: { is_deleted: false },
-                        required: false
-                    }]
+                    required: false
                 }
             ]
         });
 
-        if (!resourceType) {
-            return res.status(404).json({
-                error: 'Resource type not found',
-                message: `No configuration resource found with ${isNumericId ? 'ID' : 'name'} '${identifier}'`
-            });
-        }
 
-        // Format the response
-        const response = {
-            data: {
-                id: resourceType.id,
-                name: resourceType.name,
-                type: resourceType.type,
-                attributes: resourceType.get({ plain: true }),
-
-            }
-        };
         if (!resourceType) return res.status(404).json({ message: 'Resource Not Found!' })
 
         let resData = resourceType.get({ plain: true })

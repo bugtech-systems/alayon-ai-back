@@ -1,5 +1,9 @@
 import express from 'express';
 import FineTuneController from '../controllers/fineTuneController.js';
+import {
+    trainModel,
+    getTrainingStatus
+} from '../controllers/trainingController.js';
 
 const router = express.Router();
 
@@ -27,5 +31,9 @@ router.delete('/models/:modelName', FineTuneController.deleteModel);
 router.get('/jobs/:jobId/status', FineTuneController.checkJobStatus);
 
 router.get('/rate/:conversationId/:rate', FineTuneController.rateConversation);
+
+router.post('/train', trainModel);
+router.get('/status', getTrainingStatus);
+
 
 export default router;

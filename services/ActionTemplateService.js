@@ -70,17 +70,15 @@ export async function executeTemplate(template, parameters, filter) {
 }
 
 
+
+
 export async function getActionTemplates() {
 
     try {
 
         let resources = await db.ActionTemplate.findAll({
-            attributes: ['name', 'description', 'conditions', 'field_mappings', 'action_type', 'aggregations', 'target_resource_type_id'],
+            attributes: ['name', 'description', 'parameters', 'conditions', 'field_mappings', 'aggregations', 'tool_type', 'config'],
             include: [{
-                model: db.ActionTemplateParameter,
-                as: 'parameters',
-                required: false
-            }, {
                 model: db.ResourceTag,
                 as: 'target_resource_type',
                 required: false
@@ -209,6 +207,8 @@ export async function handleRead(template, parameters, filter) {
 
     return resourceIds
 }
+
+
 
 async function handleUpdate(template, parameters) {
     const transaction = await db.sequelize.transaction();
@@ -385,6 +385,7 @@ async function handleAggregations(template, where) {
 
     return results;
 }
+
 
 function resolveFieldMappings(mappings, parameters) {
     const result = { metadata: {}, attributes: {} };

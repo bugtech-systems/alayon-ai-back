@@ -6,24 +6,25 @@ export default ({ sequelize }, DataTypes) => {
             autoIncrement: true
         },
         role: {
-            type: DataTypes.ENUM('user', 'assistant', 'system'),
+            type: DataTypes.ENUM('system', 'user', 'assistant'),
             allowNull: false
         },
         content: {
             type: DataTypes.TEXT,
             allowNull: false
         },
-        metadata: {
-            type: DataTypes.JSONB,
-            defaultValue: {}
-        },
         tokens: {
             type: DataTypes.INTEGER,
             defaultValue: 0
         },
-        rate: {
-            type: DataTypes.INTEGER,
-            defaultValue: 0
+        confidence_score: {
+            type: DataTypes.FLOAT,
+            defaultValue: 0.7,
+            validate: { min: 0, max: 1 }
+        },
+        is_training_candidate: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         },
         created_at: {
             type: DataTypes.DATE,
@@ -36,9 +37,6 @@ export default ({ sequelize }, DataTypes) => {
         underscored: true,
         indexes: [
             {
-                fields: ['conversation_id']
-            },
-            {
                 fields: ['role']
             },
             {
@@ -46,8 +44,6 @@ export default ({ sequelize }, DataTypes) => {
             }
         ]
     });
-
-
 
     return Message;
 };

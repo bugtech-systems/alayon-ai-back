@@ -1,12 +1,18 @@
 // services/ollamaService.js
-import axios from "axios";
 import { Ollama } from 'ollama';
-import { findActionTemplateByName, getFieldsForResource, getResourceTypes } from "./ResourceService.js";
+import { findActionTemplateByName, getFieldsForResource, getResourcesByType, getResourceTypes } from "./ResourceService.js";
+import { getActionTemplates } from "./ActionTemplateService.js";
+import { db } from '../models/index.js';
+import { formatConversation, getConversationMessages, logMessage } from './aiService.js';
+import { default_schema } from '../configs/default_models.js';
+import { AIAgent } from '../tuner/app/ai-agent.js';
 
 // Initialize Ollama client with your server configuration
 const ollama = new Ollama({
     host: 'http://127.0.0.1:11434' // default Ollama port
 });
+
+
 
 
 export const resourceConfig = {
@@ -23,17 +29,31 @@ export const resourceConfig = {
     names: ['organizations', 'navigations'] // add more as needed
 };
 
-export const chatWithAI = async (messages) => {
-    const { data } = await axios.post("http://127.0.0.1:11434/api/chat", {
-        model: "mistral",
-        messages,
-        stream: false,
-        options: {
-            temperature: 0.3,
-            top_p: 0.95,
-        }
+export const generateWithAi = async (message, config = { model: 'mistral', options: { temperature: 0.3 } }) => {
+    const response = await ollama.generate({
+        ...config,
+        prompt: message,
+        options: config.options,
+        format: 'json'
     });
-    return data.message.content;
+
+    console.log(response, 'generate ai resp')
+
+    return response;
+};
+
+export const chatWithAi = async (messages, config = { model: 'mistral', options: { temperature: 0.3 } }) => {
+
+
+    const response = await ollama.chat({
+        ...config,
+        messages: messages,
+        options: config.options,
+        format: 'json'
+    });
+    console.log(response.prompt_eval_count, 'chat ai resp')
+
+    return response;
 };
 
 // Define the instruction as a constant
@@ -159,30 +179,272 @@ Generate query for: ${prompt}
  `;
 }
 
-function processResponse(response, context) {
-    try {
-        const result = JSON.parse(response.response);
-
-        // Validation
-        if (!result.method || !['create', 'get', 'update', 'delete'].includes(result.method)) {
-            throw new Error('Invalid method in response');
-        }
+export async function processActionPrompt(message, session) {
+    // let actionTemplates = await getActionTemplates();
+    // const resource_names = await getResourcesByType()
+    // let conversation = null
 
 
 
-        // Calculate confidence
-        result.confidence = calculateConfidence(result, context);
 
-        // Field validation
-        const missingFields = validateFields(result, context);
-        result.missingFields = missingFields;
 
-        return result;
-    } catch (error) {
-        console.error('Response processing error:', error);
-        throw new Error('Invalid response format from Ollama');
+    // let conversation = await getConversationMessages(session.id)
+    let aiPreset = await db.AiPreset.findOne({ where: { model_name: 'action_selector' }, order: [['id', 'DESC']] });
+
+
+
+    console.log(aiPreset.id, 'ai action preset', session.id, aiPreset.id)
+    let conversation = await db.Conversation.findOne({
+        where: { session_id: session.id, ai_preset_id: aiPreset.id }
+    })
+
+    if (!conversation) {
+        conversation = await db.Conversation.create({ session_id: session.id, ai_preset_id: aiPreset.id })
     }
+
+    console.log(conversation, 'conv')
+    const aiAgent = new AIAgent(aiPreset.id, conversation?.id);
+    await aiAgent.initialize();
+
+
+
+
+    const response = await aiAgent.generate(message);
+
+    console.log(conversation, 'conv', response)
+
+    // const allowedTemplates = actionTemplates.map(t => ({
+    //     name: t.name,
+    //     description: t.description,
+    //     // samples: t.samples.slice(0, 3) // Limit to 3 samples
+    // }));
+
+
+
+
+
+
+
+
+
+    // let messages = session.history;
+    // Prepare messages for Mistral
+    // messages.push({
+    //     role: 'system',
+    //     content: SYSTEM_INSTRUCTION
+    // })
+    // let context = formatConversation(messages)
+
+    /*   conversations.map(m => {
+          messages.push({
+              role: m.role,
+              content: m.content
+          })
+      }); */
+
+
+
+
+
+
+
+
+
+
+
+
+    // let structuredPrompt = {
+    //     context: context?.substring(0, 1000), // Truncate long context
+    //     user_prompt: message,
+    //     // allowed_templates: allowedTemplates,
+    //     // allowed_resources: resource_names.map(a => a.resource_name),
+    //     // token_budget: 1024 // For AI reference
+    // };
+
+    // Generate AI response
+
+
+    // let message = `${SYSTEM_INSTRUCTION}`
+
+    // let structuredMessages = [
+    //     {
+    //         role: "system",
+    //         content: aiPreset.system_instruction
+    //     },
+    //     {
+    //         role: "user",
+    //         content: JSON.stringify(structuredPrompt)
+    //     }
+    // ]
+
+
+
+    // let response = await chatWithAi(structuredMessages, {
+    //     model: aiPreset.name,
+    //     format: 'json',
+    //     options: aiPreset.parameters
+    //     // top_p: 0.3, // Further reduce randomness
+    //     // numCtx: 4096
+    // });
+
+
+
+    let resJson = response
+
+
+    let template = await findActionTemplateByName(response.selected_template);
+
+    if (!template) {
+        resJson.selected_template = null;
+    } else {
+        resJson.template = template;
+    }
+
+    // // Save AI response
+    // await db.Conversation.create({
+    //     title: 'alayon_action',
+    //     prompt: prompt,
+    //     response: response.response,
+    //     sessionId: context.id,
+    //     metadata: resJson,
+    //     tokens: response.eval_count || 0,
+    //     rate: resJson.confidence
+    // });
+    return resJson
 }
+
+
+
+export async function processTemplatePrompt(prompt, context) {
+
+
+
+    const template = context.template;
+
+    console.log(template, 'TEMPLTE')
+
+    // let conversation = await getConversationMessages(session.id)
+    let aiPreset = await db.AiPreset.findOne({
+        where: { model_name: 'template_engine' }, order: [['id', 'DESC']]
+    });
+
+
+
+    console.log(aiPreset.id, 'ai template preset')
+
+    let conversation = await db.Conversation.findOne({
+        where: { session_id: context.id, ai_preset_id: aiPreset.id }
+    })
+
+    if (!conversation) {
+        conversation = await db.Conversation.create({ session_id: context.id, ai_preset_id: aiPreset.id })
+    }
+
+
+
+    const aiAgent = new AIAgent(aiPreset.id, conversation.id);
+    await aiAgent.initialize();
+
+
+
+
+
+    const resource_type = context.resource_type
+
+
+    // Prepare messages for Mistral
+    // const messages = [];
+    // messages.push({
+    //     role: 'system',
+    //     content: SYSTEM_INSTRUCTION
+    // })
+
+
+
+    // conversations.map(m => {
+    //     messages.push({
+    //         role: m.role,
+    //         content: m.content
+    //     })
+    // });
+
+    // messages.push({ role: 'user', content: prompt })
+
+
+    // let conversation = formatConversation(messages)
+
+    /*   conversations.map(m => {
+          messages.push({
+              role: m.role,
+              content: m.content
+          })
+      }); */
+
+
+    let configTemplate = {
+        pre_hooks: template.pre_hooks,
+        config: template.config,
+        post_hooks: template.pre_hooks,
+    }
+
+
+    //     // Structured prompt for Ollama
+    const message = `
+      Extract key-value pairs from the conversation below to populate the ""parameters"" object for a ${template.tool_type} action.
+      - Preserve the original template "placeholders" (e.g., {{params.email}}).
+      - Only extract values explicitly mentioned in the conversation or parameters context.
+      - Never invent or assume values.
+      - Customize template value contents according to the prompt.
+      - Strictly follow this JSON schema:
+        ${JSON.stringify(default_schema[resource_type], null, 2)}
+
+      **Template**: ${JSON.stringify(configTemplate, null, 2)}
+      **Parameters**:  "${JSON.stringify(template.parameters, null, 2)}"
+      `
+
+
+
+    console.log(message, 'MES')
+    // await logMessage(context.id, 'user', message, null)
+
+
+    // let response = await generateWithAi(message, {
+    //     model: aiPreset.model_name,
+    //     system: aiPreset.system_instruction,
+    //     options: aiPreset.parameters
+    // });
+    const response = await aiAgent.generate(prompt, message);
+
+    console.log(response, 'MES RESP')
+
+    // let resJson = JSON.parse(response)
+
+    // await logMessage(context.id, 'assistant', response.response, null)
+
+    // // Save AI response
+    // await db.Message.create({
+    //     role: 'assistant',
+    //     tokens: prompt,
+    //     content: prompt,
+    //     sessionId: context.id,
+    //     metadata: resJson,
+    //     tokens: response.eval_count || 0,
+    //     rate: resJson.confidence
+    // });
+
+    // console.log(resJson, 'RSS')
+
+
+    // if (!template) {
+    //     resJson.selected_template = null;
+    // }
+
+
+
+    return response
+}
+
+
 
 export const calculateConfidence = (result, context) => {
     let score = 5; // Start with max confidence
@@ -203,13 +465,6 @@ export const calculateConfidence = (result, context) => {
     return Math.max(1, Math.min(5, Math.round(score)));
 };
 
-function validateFields(result, context) {
-    if (result.method !== 'create') return [];
-
-    return context.requiredFields.filter(field => {
-        return !result.data.values?.some(v => v.fieldName === field);
-    });
-}
 
 // export const queryResource = async (req, res) => {
 //     try {
@@ -247,9 +502,9 @@ function validateFields(result, context) {
 //                 confidence: response.confidence,
 //                 data: response.data,
 //                 query: response.query,
-//                 followUp: `Please confirm this ${response.method} operation ` +
-//                     `(confidence: ${response.confidence}/5)\n` +
-//                     `Summary: ${response.summary}`
+//                 followUp: `Please confirm this ${ response.method } operation` +
+//                     `(confidence: ${ response.confidence } / 5) \n` +
+//                     `Summary: ${ response.summary } `
 //             });
 //         }
 
@@ -275,31 +530,6 @@ function validateFields(result, context) {
 //     }
 // };
 
-function generateCompletionMessage(method, result) {
-    const baseMessages = {
-        create: `Successfully created with ID ${result._id}`,
-        get: `Found ${result.length} records`,
-        update: `Updated ${result.modifiedCount} documents`,
-        delete: `Deleted ${result.deletedCount} documents`
-    };
-
-    return baseMessages[method] || 'Operation completed successfully';
-}
-
-function handleErrorResponse(res, error) {
-    let followUp = "Please try again with a different prompt.";
-    if (error.message.includes('required')) {
-        followUp = "Missing required information. Please provide all necessary details.";
-    }
-
-    res.status(400).json({
-        success: false,
-        error: error.message,
-        followUp,
-        confidence: 1
-    });
-}
-
 const validateRequiredFields = (method, data, fieldsConfig) => {
     const missingFields = [];
     const followUpQuestions = [];
@@ -313,7 +543,7 @@ const validateRequiredFields = (method, data, fieldsConfig) => {
                     followUpQuestions.push(
                         `${field.name} (${field.fieldName}) is required. ` +
                         `${field.description ? field.description + '.' : ''} ` +
-                        `Please provide value for: ${field.fieldName}`
+                        `Please provide value for: ${field.fieldName} `
                     );
                 }
             }
@@ -349,42 +579,6 @@ const generateConfidenceScore = (response) => {
     return Math.max(1, Math.min(5, score)); // Keep between 1-5
 };
 
-// export async function findBestMatch(options, userInput, context = {}) {
-//     const prompt = `
-//     Conversation Context:
-//     ${context.lastFollowUp ? "Last prompt: " + context.lastFollowUp : "New conversation"}
-
-//     Available Options:\n
-//         ${options.map((o, i) => `${i + 1}. ${o}`).join('\n')}
-
-//     User Input: "${userInput}"
-
-//     Instructions:
-//     1. Select the best match considering:
-//        - Semantic meaning
-//        - Related terms
-//        - Common abbreviations
-//     2. If no good match exists, explain why politely
-//     3. Suggest similar valid options when appropriate
-//     4. Maintain friendly, helpful tone
-
-//     Respond in this JSON format:
-//     {
-//       "match": "exact_option_or_null",
-//       "message": "polite_explanation",
-//       "suggestions": ["similar_option1", ...]
-//     }`;
-
-//     const response = await ollama.generate({
-//         model: 'mistral:7b',
-//         prompt,
-//         format: 'json',
-//         options: { temperature: 0.4 } // Balanced creativity
-//     });
-//     console.log(response, 'sssssaaaa', options, prompt)
-
-//     return JSON.parse(response.response);
-// }
 
 export async function findBestMatch(options, userInput) {
     // Validation
@@ -419,27 +613,27 @@ export async function findBestMatch(options, userInput) {
 
     USER INPUT: "${userInput}"
 
-    AVAILABLE OPTIONS (normalized):
+    AVAILABLE OPTIONS(normalized):
     ${normalizedOptions.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}
 
     STRICT RULES:
     1. MUST select from the listed options ONLY
     2. Consider:
-       - Lexical similarity (e.g., "appple" → "apple")
-       - Word sequence ("New York" ≠ "York New")
-       - Term completeness ("Big Apple" ≠ "Apple")
+    - Lexical similarity(e.g., "appple" → "apple")
+        - Word sequence("New York" ≠ "York New")
+            - Term completeness("Big Apple" ≠ "Apple")
     3. Confidence scores:
-       1.0 = Perfect match (after normalization)
-       0.9 = Minor typo (1-2 character difference)
-       0.8 = Partial match (≥75% similarity)
-       <0.7 = No match
+    1.0 = Perfect match(after normalization)
+    0.9 = Minor typo(1 - 2 character difference)
+    0.8 = Partial match(≥75 % similarity)
+        < 0.7 = No match
 
-    OUTPUT FORMAT (JSON):
+    OUTPUT FORMAT(JSON):
     {
-      "match": "EXACT_ORIGINAL_OPTION_TEXT_OR_NULL",
-      "confidence": 0.0-1.0,
-      "reason": "Specific matching rule applied"
-    }`;
+        "match": "EXACT_ORIGINAL_OPTION_TEXT_OR_NULL",
+            "confidence": 0.0 - 1.0,
+                "reason": "Specific matching rule applied"
+    } `;
 
     try {
         const response = await ollama.generate({
@@ -493,7 +687,7 @@ export async function findMatchAction(options, userInput) {
 
     // Prepare field information for the prompt
     const fieldDescriptions = options.map(field => {
-        let description = `"${field.name}": ${field.description || 'No description'}`;
+        let description = `"${field.name}": ${field.description || 'No description'} `;
         return description;
     });
 
@@ -504,24 +698,24 @@ RESOURCE ACTION MATCHING TASK:
 # GOAL: 
 Strictly match the user's input to ONE of the provided resource actions or return null.
 
-# AVAILABLE ACTIONS (EXACT OPTIONS ONLY):
+# AVAILABLE ACTIONS(EXACT OPTIONS ONLY):
 ${options.map((opt, i) => `[${i + 1}] "${opt.name}": ${opt.description || "No description"}`).join('\n')}
 
-# USER INPUT: 
-"${normalizedInput}"
+# USER INPUT:
+    "${normalizedInput}"
 
 # RULES:
-1. **Exact Match Required**: Return ONLY if the input CLEARLY matches a listed action's name or description.
-2. **Null Default**: Return null if:
-   - No direct match exists (even if semantically close).
-   - Input is ambiguous (e.g., partial matches or typos beyond minor spelling variations).
-3. **No Hallucinations**: Never suggest actions outside the provided options.
-4. **Case/Format Insensitive**: Ignore capitalization, extra spaces, or punctuation (e.g., "CreAte-user" ≈ "create user").
-5. **No Explanations**: Return ONLY JSON, no additional text.
+    1. ** Exact Match Required **: Return ONLY if the input CLEARLY matches a listed action's name or description.
+    2. ** Null Default **: Return null if:
+        - No direct match exists(even if semantically close).
+    - Input is ambiguous(e.g., partial matches or typos beyond minor spelling variations).
+3. ** No Hallucinations **: Never suggest actions outside the provided options.
+4. ** Case / Format Insensitive **: Ignore capitalization, extra spaces, or punctuation(e.g., "CreAte-user" ≈ "create user").
+5. ** No Explanations **: Return ONLY JSON, no additional text.
 
 # OUTPUT FORMAT:
-{ "match": "<EXACT_MATCHED_ACTION_NAME>" } or null
-`;
+    { "match": "<EXACT_MATCHED_ACTION_NAME>" } or null
+        `;
 
     // Example expected outputs:
     // 1. Match:    { "match": "createUser" } 

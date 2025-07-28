@@ -17,6 +17,11 @@ export default ({ sequelize, Op }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        relationship_type: {
+            type: DataTypes.ENUM('resource', 'config'),
+            allowNull: false,
+            defaultValue: 'resource'
+        },
         source_resource_id: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -33,7 +38,7 @@ export default ({ sequelize, Op }, DataTypes) => {
                 key: 'id'
             }
         },
-        relationship_type: {
+        relationship_name: {
             type: DataTypes.STRING(100),
             allowNull: false
         },

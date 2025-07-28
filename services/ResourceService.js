@@ -67,16 +67,16 @@ export async function formattedResourceObject(ids) {
 export async function getFilteredResources(resourceType, filters = {}) {
     // Base query - resources of this type excluding configs
     const where = {
-        name: { [Op.iLike]: `%${resourceType}%` },
-        type: { [Op.ne]: 'config' },
+        resource_name: { [Op.iLike]: `%${resourceType}%` },
+        resource_type: { [Op.ne]: 'config' },
         is_deleted: false
     };
 
     // Get configuration for this resource type
     const conf = await ResourceTag.findOne({
         where: {
-            name: resourceType,
-            type: 'config',
+            resource_name: resourceType,
+            resource_type: 'config',
             is_deleted: false
         },
         raw: true
@@ -111,7 +111,7 @@ export async function getFilteredResources(resourceType, filters = {}) {
         // Transform results to key-value format
         return matchedResources.map(doc => ({
             id: doc.id,
-            name: doc.name,
+            resource_name: doc.resource_name,
             ...(doc.attributes ? Object.fromEntries(
                 Object.entries(doc.attributes).map(([fieldName, value]) => [fieldName, value])
             ) : {})
@@ -126,13 +126,13 @@ export async function getFilteredResources(resourceType, filters = {}) {
 
 export const getResourceTypes = async (excludeOrganizations = false) => {
     const types = await ResourceTag.findAll({
-        attributes: ['name'],
-        where: { is_deleted: false, type: 'config' },
-        group: ['name'],
+        attributes: ['resource_name'],
+        where: { is_deleted: false, resource_type: 'config' },
+        group: ['resource_name'],
         raw: true
     });
 
-    const typeNames = types.map(t => t.name);
+    const typeNames = types.map(t => t.resource_name);
     return excludeOrganizations
         ? typeNames.filter(t => t.toLowerCase() !== 'organizations')
         : typeNames;
@@ -141,8 +141,8 @@ export const getResourceTypes = async (excludeOrganizations = false) => {
 export const getOrganizations = async () => {
     const orgs = await ResourceTag.findAll({
         where: {
-            name: { [Op.iLike]: 'organizations' },
-            type: { [Op.ne]: 'config' },
+            resource_name: { [Op.iLike]: 'organizations' },
+            resource_type: { [Op.ne]: 'config' },
             is_deleted: false
         },
         raw: true
@@ -153,10 +153,10 @@ export const getOrganizations = async () => {
     });
 };
 
-export const getResourcesByType = async (resourceType = 'config') => {
+export const getResourcesByType = async (resourceType = 'config', options) => {
     const resources = await ResourceTag.findAll({
         where: {
-            type: resourceType,
+            resource_type: resourceType,
             is_deleted: false
         },
         include: [
@@ -177,8 +177,8 @@ export const getResourcesByType = async (resourceType = 'config') => {
 export const getFieldsByResourceType = async (resourceType) => {
     const tag = await ResourceTag.findOne({
         where: {
-            type: 'config',
-            name: resourceType,
+            resource_type: 'config',
+            resource_name: resourceType,
             is_deleted: false
         },
         raw: true
@@ -189,11 +189,11 @@ export const getFieldsByResourceType = async (resourceType) => {
 export const findResourceByName = async (name) => {
     let resource = await db.ResourceTag.findOne({
         where: {
-            type: 'config',
-            name: { [Op.iLike]: name },
+            resource_type: 'config',
+            resource_name: { [Op.iLike]: name },
             is_deleted: false
         },
-        attributes: ['id', 'name'],
+        attributes: ['id', 'resource_name'],
         include: [
             {
                 model: db.ResourceField,
@@ -224,16 +224,25 @@ export const findResourceByName = async (name) => {
 };
 
 export const findActionTemplateByName = async (name) => {
+    let options = {};
+
+    if (!name) {
+        return null
+    }
+
+    if (Number.isInteger(name) || /^\d+$/.test(name)) {
+        // If identifier is a number, use it directly as parent ID
+        options = { id: name }
+    } else {
+        options = { name }
+    }
+
+
+
     let resource = await db.ActionTemplate.findOne({
-        where: {
-            name: { [Op.iLike]: name },
-        },
-        attributes: ['name', 'description', 'conditions', 'field_mappings', 'action_type', 'aggregations', 'target_resource_type_id', 'ai_config'],
+        where: options,
+        attributes: ['id', 'name', 'description', 'parameters', 'output_as', 'conditions', 'field_mappings', 'aggregations', 'target_resource_type_id', 'tool_type', 'config', 'ai_config'],
         include: [{
-            model: db.ActionTemplateParameter,
-            as: 'parameters',
-            required: false
-        }, {
             model: db.ResourceTag,
             as: 'target_resource_type',
             required: false
@@ -243,17 +252,19 @@ export const findActionTemplateByName = async (name) => {
         return err
     });
 
+
     if (!resource) {
         return null
     }
+
     return resource.get({ plain: true })
 };
 
 export const getResourceOptions = async (name) => {
     const whereClause = {
-        type: 'resource',
+        resource_type: 'resource',
         is_deleted: false,
-        name: Array.isArray(name)
+        resource_name: Array.isArray(name)
             ? { [Op.or]: name.map(n => ({ [Op.iLike]: n })) }
             : { [Op.iLike]: name }
     };
@@ -265,7 +276,7 @@ export const getResourceOptions = async (name) => {
 
     // Group by name and collect unique names from attributes
     const nameGroups = resources.reduce((acc, resource) => {
-        const resourceName = resource.name;
+        const resourceName = resource.resource_name;
         if (acc[resourceName]) {
             acc[resourceName] = [...acc[resourceName], resource.attributes.name]; // Using object keys for automatic deduplication
         } else {
@@ -312,7 +323,7 @@ export const createResource = async (name, values, options = {}) => {
     // Check for existing resource first
     const existingResource = await ResourceTag.findOne({
         where: {
-            name,
+            resource_name: name,
             attributes: validatedValues
         }
     });
@@ -329,7 +340,7 @@ export const createResource = async (name, values, options = {}) => {
 
     // Create new resource
     return await ResourceTag.create({
-        name,
+        resource_name: name,
         attributes: validatedValues,
         relationships,
         resource_parent_id: options.resourceParent || null,
@@ -365,8 +376,8 @@ export const deleteResourceById = async (resourceId) => {
 
 export const getResourceTypesByName = async () => {
     const types = await ResourceTag.findAll({
-        attributes: ['type'],
-        group: ['type'],
+        attributes: ['resource_type'],
+        group: ['resource_type'],
         raw: true
     });
     return types
@@ -377,8 +388,8 @@ export const getResourceTypesByName = async () => {
 export const getFieldsForResource = async (resourceType) => {
     const record = await ResourceTag.findOne({
         where: {
-            type: 'config',
-            name: resourceType
+            resource_type: 'config',
+            resource_name: resourceType
         },
         raw: true
     });
@@ -388,7 +399,7 @@ export const getFieldsForResource = async (resourceType) => {
 
 export const getResourceFields = async (resourceType) => {
     const res = await ResourceTag.findOne({
-        where: { type: resourceType },
+        where: { resource_type: resourceType },
         raw: true
     });
     return res?.fields || [];
@@ -400,14 +411,14 @@ export const runQuery = async (session) => {
     switch (action) {
         case "create":
             return await ResourceTag.create({
-                type: resource,
+                resource_type: resource,
                 attributes: query_object,
                 is_deleted: false
             });
         case "get":
             return await ResourceTag.findAll({
                 where: {
-                    type: resource,
+                    resource_type: resource,
                     [Op.and]: Object.entries(query_object).map(([k, v]) => ({
                         [`attributes.${k}`]: typeof v === 'string' ? { [Op.iLike]: `%${v}%` } : v
                     }))
@@ -417,12 +428,12 @@ export const runQuery = async (session) => {
         case "update":
             return await ResourceTag.update(
                 { attributes: query_object },
-                { where: { type: resource } }
+                { where: { resource_type: resource } }
             );
         case "delete":
             return await ResourceTag.update(
                 { is_deleted: true },
-                { where: { type: resource } }
+                { where: { resource_type: resource } }
             );
         default:
             return null;
@@ -439,8 +450,8 @@ export const resourceTagService = {
             }), {});
 
         return await ResourceTag.create({
-            type: data.type || 'resource',
-            name: data.name,
+            resource_type: data.resource_type || 'resource',
+            resource_name: data.resource_name,
             attributes: values,
             is_deleted: false
         });
@@ -451,8 +462,8 @@ export const resourceTagService = {
             is_deleted: false
         };
 
-        if (filter.type) where.type = { [Op.in]: filter.types || resourceConfig.types };
-        if (filter.name) where.name = { [Op.in]: filter.names || resourceConfig.names };
+        if (filter.resource_type) where.resource_type = { [Op.in]: filter.types || resourceConfig.types };
+        if (filter.resource_name) where.resource_name = { [Op.in]: filter.names || resourceConfig.names };
 
         if (filter.values) {
             where[Op.and] = filter.values.map(valueFilter => ({

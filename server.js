@@ -10,6 +10,8 @@ import actionTemplatesRouter from './routes/actionTemplates.js';
 import resultReferencesRouter from './routes/resultReferences.js';
 import chatRouter from './routes/chat.js';
 import fineTuneRouter from './routes/trainModels.js';
+import actionTriggerRouter from './routes/actionTrigger.js';
+import auditLogRouter from './routes/auditRoutes.js';
 
 import morgan from 'morgan';
 import { swaggerSpec } from './configs/swagger.js';
@@ -23,8 +25,10 @@ import { exec } from 'child_process';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { ActionWorker } from './workers/actionWorker.js';
+import SchedulerWorker from './workers/scheduledWorker.js';
 
-
+// Start action worker
 
 
 const app = express();
@@ -94,10 +98,11 @@ app.use('/api/v1/resource-types', resourceTypesRouter);
 app.use('/api/v1/resources', resourcesRouter);
 app.use('/api/v1/relationships', relationshipsRouter);
 app.use('/api/v1/action-templates', actionTemplatesRouter);
+app.use('/api/v1/action-triggers', actionTriggerRouter);
 app.use('/api/v1/result-references', resultReferencesRouter);
 app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/tuner', fineTuneRouter);
-
+app.use('/api/v1/audit-logs', auditLogRouter);
 
 app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
     if (!req.file) {
@@ -136,8 +141,6 @@ app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
         await fs.unlink(wavPath).catch(() => { });
     }
 });
-
-
 app.get('/api/v1/test', async (req, res) => {
     try {
 
@@ -154,19 +157,12 @@ app.get('/api/v1/test', async (req, res) => {
             }
         });
 
-
-        console.log(resources, 'rrr')
-
         res.json({ text: 'Success', resources });
     } catch (error) {
         console.log('Error:', error);
         res.status(500).json({ error: 'Failed to transcribe' });
     }
 });
-
-
-
-
 
 
 // Enhanced error handling middleware
@@ -187,6 +183,9 @@ app.use((err, req, res, next) => {
 // Server startup
 const startServer = async () => {
     await syncDatabase();
+
+    // ActionWorker.start();
+    SchedulerWorker.init()
 
     app.listen(port, () => {
         console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode`);

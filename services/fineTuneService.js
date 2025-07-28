@@ -2,8 +2,9 @@ import axios from 'axios';
 import { db } from '../models/index.js';
 import ollama from 'ollama';
 import { Op } from 'sequelize';
-import { default_models } from '../tuner/models.js'
+import { DEFAULT_MODELS } from '../configs/default_models.js'
 import { systemPrompt } from '../helpers/system-prompt.js';
+import { FineTuner } from '../tuner/app/fine-tuner.js';
 
 // Get directory name in ESM
 
@@ -21,14 +22,33 @@ export default class OllamaFineTuner {
     }
 
 
+    async loadModels(limit = 50, offset = 0) {
+
+        try {
+            const presets = await db.AiPreset.findAll({
+                order: [['created_at', 'ASC']],
+                limit,
+                offset,
+                raw: true
+            });
+
+            console.log(presets, 'convi')
+
+            return presets;
+        } catch (error) {
+            throw new Error(`Failed to load dataset: ${error.message}`);
+        }
+    }
 
     async loadDataset(conversationId, limit = 50, offset = 0) {
+
+        console.log(conversationId, 'convi')
         try {
             const messages = await db.Conversation.findAll({
                 where: {
                     title: conversationId,
                     rate: {
-                        [Op.gte]: 4
+                        [Op.gte]: 5
                     }
                 },
                 order: [['created_at', 'ASC']],
@@ -43,13 +63,13 @@ export default class OllamaFineTuner {
         }
     }
 
+
+
     async deleteDataset() {
         try {
-            const messages = await db.Conversation.destroy({
+            const messages = await db.Message.destroy({
                 where: {
-                    rate: {
-                        [Op.lt]: 4
-                    }
+                    is_training_candidate: false
                 },
             });
 
@@ -80,17 +100,11 @@ export default class OllamaFineTuner {
     async createModelfile(options) {
         try {
 
+            console.log('create modelfile', options)
             const response = await ollama.create({
-                model: options.model,
-                from: options.from,
-                stream: options.stream || false,
-                ...(options.quantize && { quantize: options.quantize }),
-                ...(options.template && { template: options.template }),
-                ...(options.license && { license: options.license }),
-                ...(options.system && { system: options.system }),
-                ...(options.parameters && { parameters: options.parameters }),
-                ...(options.messages && { messages: options.messages }),
-                ...(options.adapters && { adapters: options.adapters })
+                model: options.model_name,
+                from: options.base_model,
+                parameters: options.parameters
             });
 
             if (options.stream) {
@@ -113,46 +127,49 @@ export default class OllamaFineTuner {
             // 1. Verify directories
             let responses = [];
             // let dbQueryAssistant = default_models.find(a => a.model == modelName);
+            let models = await this.loadModels();
 
-            for (let model of default_models) {
-                const dataset = await this.loadDataset(model.model);
+            for (let model of models) {
+                // const dataset = await this.loadDataset(model.model);
                 // 2. Load dataset
                 let parameters = { ...model.parameters, ...params }
                 let messages = [];
+                // console.log(model, 'MODS')
+                // dataset.map(a => {
+                //     messages.push({
+                //         role: 'user',
+                //         content: a.prompt
+                //     });
+                //     messages.push({
+                //         role: 'assistant',
+                //         content: JSON.stringify(a.metadata)
+                //     });
+                // })
 
-                dataset.map(a => {
-                    messages.push({
-                        role: 'user',
-                        content: a.prompt
-                    });
-                    messages.push({
-                        role: 'assistant',
-                        content: JSON.stringify(a.metadata)
-                    });
-                })
-
-
-
-
-                const query = {
-                    ...model,
-                    system: model.model == 'alayon_sequelize' ? await systemPrompt() : model.system,
-                    parameters,
-                    messages: [...model.messages, ...messages]
-                };
+                const newModel = await FineTuner.createFineTunedModel(model.id);
 
 
 
+                // const query = {
+                //     ...model,
+                //     system: model.model == 'alayon_sequelize' ? await systemPrompt() : model.system,
+                //     parameters,
+                //     // messages: [...model.messages, ...messages]
+                // };
 
-                // 3. Create modelfile
-                const modelfile = await this.createModelfile(query);
+
+
+
+                // // 3. Create modelfile
+                // const modelfile = await this.createModelfile(query);
 
                 responses.push({
                     // ...response.data,
-                    system: model.model == 'alayon_sequelize' ? await systemPrompt() : model.system,
-                    modelfile,
-                    modelName: model.model,
-                    dataset: query.messages
+                    system_instruction: newModel,
+                    // modelfile,
+                    modelName: model.name,
+
+                    // dataset: query.messages
                 })
             }
 

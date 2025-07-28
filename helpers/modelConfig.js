@@ -1,4 +1,3 @@
-import { db } from '../models/index.js';
 import { findResourceByName, getResourceOptions, getResourcesByType } from '../services/ResourceService.js';
 
 
@@ -11,11 +10,11 @@ export const validationConfig = async () => {
     let fieldOptions = {}
 
     for (const resrce of resources) {
-        let resource = await findResourceByName(resrce.name);
+        let resource = await findResourceByName(resrce.resource_name);
 
         if (resource) {
-            allowedResources.push(resource.name)
-            allowedFields[resource.name] = [];
+            allowedResources.push(resource.resource_name)
+            allowedFields[resource.resource_name] = [];
             let options = {};
             let selectFields = resource?.fields.filter(a => a.data_type == 'select').map(a => a.options_resource_type);
 
@@ -23,9 +22,9 @@ export const validationConfig = async () => {
                 options = await getResourceOptions(selectFields);
             }
             for (let field of resource.fields) {
-                allowedFields[resource.name].push(`attributes.${field.field_name}`);
+                allowedFields[resource.resource_name].push(`attributes.${field.field_name}`);
                 if (field.options_resource_type && options[field.options_resource_type]) {
-                    fieldOptions[`${resource.name}.attributes.${field.field_name}`] = options[field.options_resource_type]
+                    fieldOptions[`${resource.resource_name}.attributes.${field.field_name}`] = options[field.options_resource_type]
                 }
 
             }

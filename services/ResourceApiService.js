@@ -1,5 +1,5 @@
 import { db } from '../models/index.js';
-import { Sequelize } from 'sequelize';
+import { Sequelize, where } from 'sequelize';
 
 class ResourceService {
 
@@ -19,10 +19,10 @@ class ResourceService {
             where: {
                 [this.Op.and]: [
                     Sequelize.where(
-                        Sequelize.fn('lower', Sequelize.col('name')),
+                        Sequelize.fn('lower', Sequelize.col('resource_name')),
                         Sequelize.fn('lower', resourceName)
                     ),
-                    { type: 'config' }
+                    { resource_type: 'config' }
                 ]
             },
             include: [{
@@ -183,9 +183,9 @@ class ResourceService {
      * @param {Object} [transaction] - Sequelize transaction object
      * @returns {Promise<Object>} Created resource with relationships
      */
-    async createResource({ name, attributes, relationships = [] }, transaction = null) {
+    async createResource({ resource_name, attributes, relationships = [] }, transaction = null) {
         // Validate input
-        if (!name || typeof name !== 'string') {
+        if (!resource_name || typeof resource_name !== 'string') {
             throw new Error('Resource name is required and must be a string');
         }
 
@@ -196,15 +196,18 @@ class ResourceService {
         const options = { transaction };
         const { parentResource } = await this.validateResourceAttributes(
             attributes,
-            name,
+            resource_name,
             transaction
         );
+
+        console.log(parentResource, 'PARR')
+
 
         try {
             // Create the resource
             const resource = await this.ResourceTag.create({
-                type: 'resource',
-                name,
+                resource_type: 'resource',
+                resource_name: resource_name,
                 resource_parent_id: parentResource?.id || null,
                 attributes
             }, options);
@@ -248,8 +251,8 @@ class ResourceService {
         const options = { transaction };
         const relationshipPromises = relationships.map(async (rel) => {
             // Validate relationship
-            if (!rel.target_resource_id || !rel.relationship_type) {
-                throw new Error('Each relationship requires target_resource_id and relationship_type');
+            if (!rel.target_resource_id || !rel.relationship_name) {
+                throw new Error('Each relationship requires target_resource_id and relationship_name');
             }
 
             // Check if target resource exists
@@ -262,7 +265,7 @@ class ResourceService {
             return this.ResourceRelationship.create({
                 source_resource_id: sourceResourceId,
                 target_resource_id: rel.target_resource_id,
-                relationship_type: rel.relationship_type,
+                relationship_name: rel.relationship_name,
                 attributes: rel.attributes || null,
                 start_at: rel.start_at || null,
                 end_at: rel.end_at || null,
@@ -343,11 +346,24 @@ class ResourceService {
             include.push({
                 model: this.ResourceTag,
                 as: 'parent',
-                attributes: ['id', 'name']
+                attributes: ['id', 'resource_name']
             });
         }
 
-        return await this.ResourceTag.findByPk(id, { include });
+        let opts = {}
+
+        if (Number.isInteger(id) || /^\d+$/.test(id)) {
+            // If identifier is a number, use it directly as parent ID
+            opts = { id: id }
+        } else {
+            opts = { resource_name: id }
+        }
+
+
+
+
+
+        return await this.ResourceTag.findOne({ where: opts }, { include });
     }
 
     async getResourcesByType(identifier) {
@@ -386,7 +402,6 @@ class ResourceService {
         try {
             let parentId;
 
-            console.log(identifier, 'IDENTIFY')
 
             if (Number.isInteger(identifier) || /^\d+$/.test(identifier)) {
                 // If identifier is a number, use it directly as parent ID
@@ -396,9 +411,9 @@ class ResourceService {
                 const parentResource = await this.ResourceTag.findOne({
                     where: {
                         is_deleted: false,
-                        type: 'config',
-                        name: sequelize.where(
-                            sequelize.fn('LOWER', sequelize.col('name')),
+                        resource_type: 'config',
+                        resource_name: sequelize.where(
+                            sequelize.fn('LOWER', sequelize.col('resource_name')),
                             '=',
                             identifier.toLowerCase()
                         )
@@ -428,12 +443,12 @@ class ResourceService {
         }
     }
 
-    async updateResource(id, { name, attributes }, transaction) {
+    async updateResource(id, { resource_name, attributes }, transaction) {
         const resource = await this.ResourceTag.findByPk(id, {
             include: [{
                 model: this.ResourceTag,
                 as: 'parent',
-                attributes: ['id', 'name']
+                attributes: ['id', 'resource_name']
             }],
             transaction
         });
@@ -443,7 +458,7 @@ class ResourceService {
         }
 
         const updates = {};
-        if (name) updates.name = name;
+        if (resource_name) updates.resource_name = resource_name;
         if (attributes) updates.attributes = attributes;
 
         // if (attributes && resource.resource_parent_id) {
@@ -454,13 +469,13 @@ class ResourceService {
         //     );
         // }
 
-        if (name && name !== resource.name) {
+        if (resource_name && resource_name !== resource.resource_name) {
             const existingWithSameName = await this.ResourceTag.findOne({
                 where: {
                     [this.Op.and]: [
                         Sequelize.where(
-                            Sequelize.fn('lower', Sequelize.col('name')),
-                            Sequelize.fn('lower', name)
+                            Sequelize.fn('lower', Sequelize.col('resource_name')),
+                            Sequelize.fn('lower', resource_name)
                         ),
                         { resource_parent_id: resource.resource_parent_id }
                     ],
@@ -504,13 +519,7 @@ class ResourceService {
             }
         );
 
-        await this.ResourceValue.update(
-            { is_deleted: newDeletedStatus },
-            {
-                where: { resource_tag_id: id },
-                transaction
-            }
-        );
+
 
         await this.ResourceRelationship.update(
             { is_deleted: newDeletedStatus },

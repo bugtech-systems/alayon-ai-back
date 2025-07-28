@@ -13,9 +13,29 @@ export default ({ sequelize }, DataTypes) => {
         description: {
             type: DataTypes.TEXT
         },
-        action_type: {
-            type: DataTypes.ENUM('create', 'read', 'update', 'delete'),
-            allowNull: false
+        output_as: {
+            type: DataTypes.STRING(255),
+        },
+        tool_type: {
+            type: DataTypes.ENUM(
+                'SMS',
+                'EMAIL',
+                'API_CALL',
+                'DB_OPERATION',
+                'SCRIPT',
+                'COMPOSITE',
+                'SPEAK'
+            ),
+            allowNull: true,
+            defaultValue: "DB_OPERATION"
+        },
+        config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        is_active: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
         },
         resource_type: {
             type: DataTypes.ENUM('config', 'resource', 'connection', 'execution'),
@@ -40,6 +60,9 @@ export default ({ sequelize }, DataTypes) => {
         ai_config: {
             type: DataTypes.JSONB
         },
+        parameters: {
+            type: DataTypes.JSONB
+        },
         is_chat_enabled: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
@@ -55,16 +78,16 @@ export default ({ sequelize }, DataTypes) => {
         updatedAt: 'updated_at'
     });
 
-    ActionTemplate.associate = function (models) {
-        ActionTemplate.belongsTo(models.ResourceTag, {
-            foreignKey: 'target_resource_type_id',
-            as: 'target_resource_type'
-        });
-        ActionTemplate.hasMany(models.ActionTemplateParameter, {
-            foreignKey: 'template_id',
-            as: 'parameters'
-        });
-    };
+    // ActionTemplate.associate = function (models) {
+    //     ActionTemplate.belongsTo(models.ResourceTag, {
+    //         foreignKey: 'target_resource_type_id',
+    //         as: 'target_resource_type'
+    //     });
+    //     ActionTemplate.hasMany(models.ActionTemplateParameter, {
+    //         foreignKey: 'template_id',
+    //         as: 'parameters'
+    //     });
+    // };
 
     return ActionTemplate;
 };

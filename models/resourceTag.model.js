@@ -5,12 +5,12 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
-        type: {
+        resource_type: {
             type: DataTypes.ENUM('resource', 'config', 'connections', 'tag'),
             allowNull: false,
             defaultValue: 'resource'
         },
-        name: {
+        resource_name: {
             type: DataTypes.STRING(255),
             allowNull: false
         },
@@ -41,7 +41,7 @@ export default ({ sequelize }, DataTypes) => {
         updatedAt: 'updated_at',
         indexes: [
             {
-                fields: ['type', 'name']
+                fields: ['resource_type', 'resource_name']
             },
             {
                 fields: ['resource_parent_id']

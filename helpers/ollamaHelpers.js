@@ -70,8 +70,8 @@ async function resolveResourceIds(conditions) {
             const resourceType = key.replace('_resource_name', '');
             const resource = await db.ResourceTag.findOne({
                 where: {
-                    name: value,
-                    type: resourceType
+                    resource_name: value,
+                    resource_type: resourceType
                 }
             });
             if (!resource) throw new Error(`${resourceType} resource not found: ${value}`);
@@ -97,20 +97,21 @@ function mapAttributes(conditions) {
 
 // New: Create relationship between resources
 async function createResourceRelationship(options) {
-    const { source_conditions, target_conditions, ...relationshipData } = options;
-
+    const { data: { sourceResource, targetResource }, source_conditions, target_conditions, ...relationshipData } = options;
     // Resolve source resource
-    const sourceResource = await db.ResourceTag.findOne({
-        where: mapAttributes(source_conditions)
-    });
+    // const sourceResource = await db.ResourceTag.findOne({
+    //     where: mapAttributes(source_conditions)
+    // });
+
+    console.log(options, 'OPTIONS')
     if (!sourceResource) {
         throw new Error(`Source resource not found: ${JSON.stringify(source_conditions)}`);
     }
 
     // Resolve target resource
-    const targetResource = await db.ResourceTag.findOne({
-        where: mapAttributes(target_conditions)
-    });
+    // const targetResource = await db.ResourceTag.findOne({
+    //     where: mapAttributes(target_conditions)
+    // });
     if (!targetResource) {
         throw new Error(`Target resource not found: ${JSON.stringify(target_conditions)}`);
     }
@@ -144,6 +145,7 @@ export async function processMessage(userInput, conversation) {
 
 
 
+
     const response = await ollama.chat({
         model: currentModel,
         messages: promptMessages,
@@ -152,11 +154,21 @@ export async function processMessage(userInput, conversation) {
 
     // console.log(promptMessages, 'PROMPT', response)
 
+    let chat = await db.Conversation.create({
+        title: currentModel,
+        prompt: userInput,
+        response: response.message.content,
+        sessionId: conversation.id,
+        // metadata: result,
+        tokens: response.message.tokens || 0,
+        rate: 0
+    });
+
     const result = JSON.parse(response.message.content);
 
 
-
-
+    console.log(response.message.content)
+    chat.metadata = result;
     conversation.history.push({
         role: 'assistant',
         content: response.message.content,
@@ -166,183 +178,256 @@ export async function processMessage(userInput, conversation) {
     });
 
 
-    await db.Conversation.create({
-        title: currentModel,
-        prompt: userInput,
-        response: response.message.content,
-        sessionId: conversation.id,
-        metadata: result,
-        tokens: response.message.tokens || 0,
-        rate: 0
-    });
 
     if (result.sequelizeQuery) {
-        const { model, options } = result.sequelizeQuery;
-        const resource = conversation.resourceName;
-
-        const validation = await validationConfig()
-
-        console.log(validation, resource, 'MODEL SCHEMA')
-
-        // 1. Validate resource
-        if (!validation.allowedResources.includes(resource)) {
-            return {
-                message: `Resource '${resource}' not allowed. Valid resources: ${validation.allowedResources.join(', ')}`,
-                type: 'error',
-                needsConfirmation: false
-            };
+        const { model, options, needsConfirmation, operation } = result.sequelizeQuery;
+        if (needsConfirmation) {
+            result.needsConfirmation = needsConfirmation;
         }
 
-        // 2. Validate fields in where/data
-        const whereFields = options.where?.attributes ? Object.keys(options.where?.attributes) : [];
-        const dataFields = options.data?.attributes ? Object.keys(options.data?.attributes) : [];
-        const allFields = [...whereFields, ...dataFields];
-        const invalidFields = await validateFields(resource, allFields);
+        if (model == 'ResourceTag') {
+            const resource = conversation.resourceName;
 
-        if (invalidFields.length > 0) {
-            return {
-                message: `Invalid fields for ${resource}: ${invalidFields.join(', ')}`,
-                type: 'error',
-                needsConfirmation: false
-            };
-        }
+            const validation = await validationConfig()
 
-        // 3. Validate field values
-        const valueErrors = await validateFieldValues(resource, options.data || {});
-        if (valueErrors.length > 0) {
-            return {
-                message: `Validation errors:\n- ${valueErrors.join('\n- ')}`,
-                type: 'error',
-                needsConfirmation: false
-            };
-        }
+            console.log(validation, resource, 'MODEL SCHEMA')
 
-
-
-        if (result.type === 'create_relationship') {
-            const { options } = result.sequelizeQuery;
-
-            // Validate relationship type
-            const allowedTypes = validation.fieldOptions['ResourceRelationship.relationship_type'];
-            if (!allowedTypes.includes(options.relationship_type)) {
+            // 1. Validate resource
+            if (!validation.allowedResources.includes(resource)) {
                 return {
-                    message: `Invalid relationship type. Allowed: ${allowedTypes.join(', ')}`,
-                    type: 'error'
+                    message: `Resource '${resource}' not allowed. Valid resources: ${validation.allowedResources.join(', ')}`,
+                    type: 'error',
+                    needsConfirmation: false
                 };
             }
 
-            // Store pending relationship creation
-            conversation.pending = result;
-            result.message = `Create ${options.relationship_type} relationship between resources?`;
-        }
+            // 2. Validate fields in where/data
+            const whereFields = options.where?.attributes ? Object.keys(options.where?.attributes) : [];
+            const dataFields = options.data?.attributes ? Object.keys(options.data?.attributes) : [];
+            const allFields = [...whereFields, ...dataFields];
+            const invalidFields = await validateFields(resource, allFields);
 
+            console.log(allFields, 'ALL FIELDS', options, validation.allowedFields[resource], invalidFields, whereFields, dataFields)
 
+            if (invalidFields.length > 0) {
+                return {
+                    message: `Invalid fields for ${resource}: ${invalidFields.join(', ')}`,
+                    type: 'error',
+                    needsConfirmation: false
+                };
+            }
 
-        // Process Sequelize queries
-        if (result.type != 'create') {
-            const { model, options, needsConfirmation } = result.sequelizeQuery;
+            // 3. Validate field values
+            const valueErrors = await validateFieldValues(resource, options.data || {});
 
-            // Resolve names and attributes
-            if (options.where) {
-                options.where = await resolveResourceIds(options.where);
-                // console.log(options.where, 'where opt')
-
-                options.where = mapAttributes(options.where);
-                // console.log(options.where, 'where att')
-
+            if (valueErrors.length > 0) {
+                return {
+                    message: `Validation errors:\n- ${valueErrors.join('\n- ')}`,
+                    type: 'error',
+                    needsConfirmation: false
+                };
             }
 
 
 
-            let where = buildWhereClause(options.where, options.data)
 
 
-            // Get the allowed fields for this resource type
-            const fields = validation.allowedFields[resource] || [];
 
-            // Build dynamic attributes array
-            const attributes = [
-                'id', // Always include ID
-                'type', // Include type if needed
-                ...fields.map(fieldPath => {
-                    const [parentField, ...nestedPath] = fieldPath.split('.');
-                    const attributeName = nestedPath.join('_'); // Convert 'attributes.label' to 'label'
+            // Process Sequelize queries
+            if (result.type != 'create') {
 
-                    // PostgreSQL syntax
-                    return [
-                        db.sequelize.literal(`(${parentField}->>'${nestedPath.join('.')}')::text`),
-                        attributeName
-                    ];
+                // Resolve names and attributes
+                if (options.where) {
+                    options.where = await resolveResourceIds(options.where);
+                    // console.log(options.where, 'where opt')
 
-                    // MySQL alternative:
-                    // return [
-                    //   sequelize.fn('JSON_UNQUOTE',
-                    //     sequelize.fn('JSON_EXTRACT',
-                    //       sequelize.col(parentField),
-                    //       `$.${nestedPath.join('.')}`
-                    //     )
-                    //   ),
-                    //   attributeName
-                    // ];
-                })
-            ];
+                    options.where = mapAttributes(options.where);
+                    // console.log(options.where, 'where att')
+
+                }
 
 
-            console.log(attributes, 'attributessss', fields)
 
-            const records = await db[model].findAll({
+                let where = buildWhereClause(options.where, options.data)
+
+
+                // Get the allowed fields for this resource type
+                const fields = validation.allowedFields[resource] || [];
+
+                // Build dynamic attributes array
+                const attributes = [
+                    'id', // Always include ID
+                    'resource_type', // Include type if needed
+                    'resource_name',
+                    ...fields.map(fieldPath => {
+                        const [parentField, ...nestedPath] = fieldPath.split('.');
+                        const attributeName = nestedPath.join('_'); // Convert 'attributes.label' to 'label'
+
+                        // PostgreSQL syntax
+                        return [
+                            db.sequelize.literal(`(${parentField}->>'${nestedPath.join('.')}')::text`),
+                            attributeName
+                        ];
+
+                        // MySQL alternative:
+                        // return [
+                        //   sequelize.fn('JSON_UNQUOTE',
+                        //     sequelize.fn('JSON_EXTRACT',
+                        //       sequelize.col(parentField),
+                        //       `$.${nestedPath.join('.')}`
+                        //     )
+                        //   ),
+                        //   attributeName
+                        // ];
+                    })
+                ];
+
+
+
+
+
+                const records = await db[model].findAll({
+                    where: {
+                        ...where,
+                        is_deleted: false
+                    },
+                    attributes: attributes,
+                    // raw: true
+                });
+
+                result.foundRecords = records;
+                conversation.results = records;
+
+                result.message = `Provide only what users asks with precise, detailed summary of data context.`;
+
+            } else {
+                if (!allFields.length) {
+                    return {
+                        message: `Creation error:\nProvide Data:- ${validation.allowedFields[resource].join('\n- ')}`,
+                        type: 'error',
+                        needsConfirmation: false
+                    };
+                }
+            }
+        }
+        console.log(result, 'RES')
+        if (result.type == 'create_relationship') {
+
+
+            // Validate relationship type
+            // const allowedTypes = validation.fieldOptions['ResourceRelationship.relationship_type'];
+            // if (!allowedTypes.includes(options.relationship_type)) {
+            //     return {
+            //         message: `Invalid relationship type. Allowed: ${allowedTypes.join(', ')}`,
+            //         type: 'error'
+            //     };
+            // }
+            console.log(options, 'RELATE OPTIONS')
+            let sourceWhere = buildWhereClause(options.source_conditions, {})
+            let targetWhere = buildWhereClause(options.target_conditions, {})
+
+
+
+
+
+
+            const sourceResource = await db.ResourceTag.findOne({
                 where: {
-                    ...where,
-                    type: 'resource',
+                    ...sourceWhere,
                     is_deleted: false
                 },
-                attributes: attributes,
+                // attributes: attributes,
                 raw: true
             });
 
-            result.foundRecords = records;
-            conversation.results = records;
 
-            result.message = `Provide only what users asks with precise, short details summary from data context.`;
-            if (needsConfirmation) {
-                result.needsConfirmation = needsConfirmation;
+            if (!sourceResource) {
+                return {
+                    message: `Source resource not found`,
+                    type: 'error',
+                    needsConfirmation: false
+                };
+            }
+
+
+            const targetResource = await db.ResourceTag.findOne({
+                where: {
+                    ...targetWhere,
+                    is_deleted: false
+                },
+                // attributes: attributes,
+                raw: true
+            })
+
+
+
+            // Resolve target resource
+            // const targetResource = await db.ResourceTag.findOne({
+            //     where: mapAttributes(target_conditions)
+            // });
+            if (!targetResource) {
+                return {
+                    message: `Target resource not found`,
+                    type: 'error',
+                    needsConfirmation: false
+                };
+            }
+
+
+
+            console.log(sourceResource, targetResource, 'RECORDS')
+
+            // Store pending relationship creation
+            conversation.context = {
+                source: sourceResource,
+                target: targetResource
+            }
+
+
+            result.foundRecords = [sourceResource, targetResource];
+            conversation.results = [sourceResource, targetResource];
+            result.sequelizeQuery.options = { ...result.sequelizeQuery.options, data: { sourceResource, targetResource } }
+            if (result.needsConfirmation) {
+                conversation.pending = { ...result };
+                result.message = `Respond with summary of data and ask for Confirmation to proceed with the action. Create ${options.relationship_type} relationship?`;
+
             }
         }
+        // Store pending operations
+        if ((['update', 'delete', 'create'].includes(result.type) && result.needsConfirmation)) {
+            result.message = `Respond with summary of data and ask for Confirmation to proceed with the action ${result.type || operation}. Found ${!result?.foundRecords?.length ? 0 : result?.foundRecords?.length} records.`;
+            conversation.pending = result;
+        }
+
     }
 
 
 
-    // Store pending operations
-    if ((['update', 'delete', 'create'].includes(result.type) && result.needsConfirmation)) {
-        result.message = `Respond with summary of data and ask for Confirmation to proceed with the action. Found ${!result?.foundRecords?.length ? 0 : result?.foundRecords?.length} records to ${result.type}`;
-        conversation.pending = result;
-    }
 
 
 
-    // console.log(result, 'result')
 
+    await chat.save();
     return result;
 }
 
 export async function confirmOperation(conversation, confirmation) {
     if (!conversation.pending) throw new Error('No pending operation');
-    const { sequelizeQuery, type, foundRecords } = conversation.pending;
-    const operation = type;
+    const { sequelizeQuery, foundRecords } = conversation.pending;
 
     if (confirmation !== 'yes') {
         conversation.pending = null;
         return 'Operation cancelled';
     }
 
-    const { model, options } = sequelizeQuery;
+    const { model, options, operation } = sequelizeQuery;
     // const foundRecords = conversation.results;
 
     if (!foundRecords?.length && ['update', 'delete'].includes(operation)) {
         return `Operation failed, Found ${foundRecords?.length} record to ${type}.`;
     } else if (operation == 'create' && !options.data) {
         return `No data to be created.`;
-    } else if (model === 'ResourceRelationship') {
+    } else if (operation == 'create' && model == 'ResourceRelationship') {
         const result = await createResourceRelationship(sequelizeQuery.options);
         conversation.pending = null;
         return `Relationship created successfully. ID: ${result.id}`;
@@ -365,8 +450,8 @@ export async function confirmOperation(conversation, confirmation) {
             })
 
             await db.ResourceTag.create({
-                type: 'resource',
-                name: conversation.resourceName,
+                resource_type: 'resource',
+                resource_name: conversation.resourceName,
                 resource_parent_id: conversation.resourceId,
                 ...data
             }).then(rs => {

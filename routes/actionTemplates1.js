@@ -42,13 +42,27 @@ router.post('/', async (req, res, next) => {
             aggregations = [],
             pre_hooks = [],
             post_hooks = [],
-            parameters = []
+            parameters = [],
+            ...otherBody
         } = req.body;
 
         // Validate required fields
         if (!name || !action_type) {
             throw new Error('Name and action_type are required');
         }
+
+        console.log({
+            name,
+            description,
+            action_type,
+            target_resource_type_id,
+            conditions,
+            field_mappings,
+            aggregations,
+            pre_hooks,
+            post_hooks,
+            ...otherBody
+        }, 'BODY')
 
         // Create template within transaction
         const template = await db.ActionTemplate.create({
@@ -60,7 +74,8 @@ router.post('/', async (req, res, next) => {
             field_mappings,
             aggregations,
             pre_hooks,
-            post_hooks
+            post_hooks,
+            ...otherBody
         }, { transaction });
 
         // Create parameters within the same transaction

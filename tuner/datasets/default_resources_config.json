@@ -1,0 +1,110 @@
+[
+    {
+        "name": "Users",
+        "fields": [
+            {
+                "field_name": "username",
+                "data_type": "string",
+                "is_required": true,
+                "is_unique": true
+            },
+            {
+                "field_name": "age",
+                "data_type": "number"
+            },
+            {
+                "field_name": "profile",
+                "data_type": "json"
+            },
+            {
+                "field_name": "status",
+                "data_type": "string"
+            }
+        ]
+    },
+    {
+        "name": "Organizations",
+        "fields": [
+            {
+                "field_name": "name",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "address",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "type",
+                "data_type": "string",
+                "is_required": true
+            }
+        ]
+    },
+    {
+        "name": "navigations",
+        "fields": [
+            {
+                "field_name": "title",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "url",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "icon",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "module",
+                "data_type": "string",
+                "is_required": true
+            }
+        ]
+    },
+    {
+        "name": "roles",
+        "fields": [
+            {
+                "field_name": "name",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "description",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "value",
+                "data_type": "string",
+                "is_required": true
+            }
+        ]
+    },
+    {
+        "name": "status",
+        "fields": [
+            {
+                "field_name": "name",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "description",
+                "data_type": "string",
+                "is_required": true
+            },
+            {
+                "field_name": "value",
+                "data_type": "string",
+                "is_required": true
+            }
+        ]
+    }
+]

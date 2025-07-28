@@ -12,7 +12,7 @@ class AIService {
             baseUrl: 'http://localhost:11434',
             model: 'mistral', // or 'llama3'
             temperature: 0.1,
-            numCtx: 4096,
+            // numCtx: 4096,
             topP: 0.9
         });
     }
@@ -233,19 +233,19 @@ Response MUST be valid JSON in this exact format:
         return output;
     }
 
-    async formatResultsForUser(results, query, explanation) {
+    async formatResultsForUser(results = [], query, explanation) {
         let newResults = results.map(a => removeNullKeys(a))
-        console.log(newResults, 'nrew')
         const prompt = `
-You are Alayon AI a helpful assistant to report data results to non-technical users.
+You are Alayon AI a helpful assistant to report data results to non-technical users. Do not halucinate data values response.
 
-##DATA CONTEXT(JSON):
+##CONTEXT:
 ${JSON.stringify(newResults)}
 
 
+##PROMPT
 User asked: "${query}"
 
-
+##RULE
 Important Instruction:
 ${explanation}
 
@@ -253,8 +253,8 @@ ${explanation}
 Important Rules:
 1. Present the information in a clear, non-technical manner.
 2. Analyze carefully and understand the data context key value pairs in JSON.
-3. Response should complete, precise, SMS Friendly.
-4. Do not come-up with value not specified in the object. Do not provide recommendations or suggestions.
+3. Response should be short, precise, SMS Friendly.
+4. Do not provide recommendations or suggestions.
 5. Respond the data objects that user asked or specified to provide.
 
 
@@ -275,7 +275,7 @@ Template Options:
   ${JSON.stringify(actions.map((a, index) => a.name), null, 2)}
 
 Action Options:
-create, update, delete, read, clear
+create, update, delete, read, create_relationship, clear
 
 Resource Options:
  ${JSON.stringify(resources, null, 2)}
