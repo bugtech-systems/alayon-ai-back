@@ -404,7 +404,7 @@ const syncDatabase = async () => {
     try {
         initializedDb = await initializeDatabase();
         console.log('Database initialized successfully');
-        // await seedResources();
+        await seedResources();
         await seedActionTemplates()
         await seedAiPreset()
         // await seedCRUDActionTemplates();

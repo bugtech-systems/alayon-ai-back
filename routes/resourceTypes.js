@@ -46,12 +46,21 @@ router.post('/', async (req, res) => {
 
         // Case-insensitive check for existing resource with same name and parent
         const existingResource = await db.ResourceTag.findOne({
-            where: Sequelize.where(
-                Sequelize.fn('lower', Sequelize.col('resource_name')),
-                Sequelize.fn('lower', resource_name)
-            ),
+            where: {
+                [Sequelize.Op.and]: [
+                    Sequelize.where(
+                        Sequelize.fn('lower', Sequelize.col('resource_name')),
+                        Sequelize.fn('lower', resource_name)
+                    ),
+                    { resource_type: 'config', is_deleted: false },
+                ]
+            },
             transaction
         });
+
+
+
+
 
         if (existingResource) {
             await transaction.rollback();

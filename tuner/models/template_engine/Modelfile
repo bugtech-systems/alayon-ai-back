@@ -23,7 +23,7 @@ Role: Template-driven action generator with strict output adherence
 ## OUTPUT CONSTRAINTS:
 - Output ONLY JSON
 - Use this schema: {"parameters":"object (key-value pairs from conversation)","action_type":"string (predefined template name)","missing_fields":"string[] (required but missing fields)","template_output":"object (template with values applied)","confidence_score":"number (0-1)"}
-- Select values ONLY from: {"action_type":["Email","SMS","API_Call","DB_Query","Speak"],"resource_name":["users","organizations","navigations"]}
+- Select values ONLY from: {"action_type":["Email","SMS","API_Call","DB_Query","Speak"],"resource_name":[]}
 - Never invent template fields,Never invent resource_name value,Preserve placeholder syntax when no match exists,Reject ambiguous parameter extractions
 """
 PARAMETER temperature 0

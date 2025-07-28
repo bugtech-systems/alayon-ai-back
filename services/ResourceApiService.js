@@ -22,7 +22,7 @@ class ResourceService {
                         Sequelize.fn('lower', Sequelize.col('resource_name')),
                         Sequelize.fn('lower', resourceName)
                     ),
-                    { resource_type: 'config' }
+                    { resource_type: 'config', is_deleted: false }
                 ]
             },
             include: [{

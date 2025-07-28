@@ -67,46 +67,46 @@ export const config = [
             }
         ]
     },
-    {
-        "resource_name": "roles",
-        "fields": [
-            {
-                "field_name": "name",
-                "data_type": "string",
-                "is_required": true
-            },
-            {
-                "field_name": "description",
-                "data_type": "string",
-                "is_required": true
-            },
-            {
-                "field_name": "value",
-                "data_type": "string",
-                "is_required": true
-            }
-        ]
-    },
-    {
-        "resource_name": "status",
-        "fields": [
-            {
-                "field_name": "name",
-                "data_type": "string",
-                "is_required": true
-            },
-            {
-                "field_name": "description",
-                "data_type": "string",
-                "is_required": true
-            },
-            {
-                "field_name": "value",
-                "data_type": "string",
-                "is_required": true
-            }
-        ]
-    }
+    // {
+    //     "resource_name": "roles",
+    //     "fields": [
+    //         {
+    //             "field_name": "name",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         },
+    //         {
+    //             "field_name": "description",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         },
+    //         {
+    //             "field_name": "value",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         }
+    //     ]
+    // },
+    // {
+    //     "resource_name": "status",
+    //     "fields": [
+    //         {
+    //             "field_name": "name",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         },
+    //         {
+    //             "field_name": "description",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         },
+    //         {
+    //             "field_name": "value",
+    //             "data_type": "string",
+    //             "is_required": true
+    //         }
+    //     ]
+    // }
 ]
 
 export const action_templates = [
