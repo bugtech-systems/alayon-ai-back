@@ -241,12 +241,7 @@ export const findActionTemplateByName = async (name) => {
 
     let resource = await db.ActionTemplate.findOne({
         where: options,
-        attributes: ['id', 'name', 'description', 'parameters', 'output_as', 'conditions', 'field_mappings', 'aggregations', 'target_resource_type_id', 'tool_type', 'config', 'ai_config'],
-        include: [{
-            model: db.ResourceTag,
-            as: 'target_resource_type',
-            required: false
-        }]
+        attributes: ['id', 'name', 'description', 'parameters', 'output_as', 'tool_type', 'config'],
     }).catch(err => {
         console.log(err, 'RANGE ERR')
         return err

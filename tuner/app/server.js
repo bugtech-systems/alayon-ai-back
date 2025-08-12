@@ -92,12 +92,13 @@ app.post('/models/:id/fine-tune', async (req, res) => {
 
     try {
         console.log('[FINE-TUNE] Checking for sufficient training data...');
-        const newModel = await FineTuner.createFineTunedModel(modelId);
+        const { newModel, messages } = await FineTuner.createFineTunedModel(modelId);
 
         console.log(`[FINE-TUNE] ✓ Created fine-tuned model: ${newModel.name}`);
         res.status(201).json({
             message: 'Fine-tuning completed successfully',
-            model: newModel
+            model: newModel,
+            messages
         });
     } catch (error) {
         console.error('[FINE-TUNE] Fine-tuning failed:', error.message);

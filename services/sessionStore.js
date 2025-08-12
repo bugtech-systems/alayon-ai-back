@@ -5,21 +5,21 @@ import { db } from '../models/index.js';
 const sessions = new Map();
 
 // Cleanup expired sessions every minute
-// setInterval(() => {
-//     const now = Date.now();
-//     console.log(`[Session Cleanup] Running cleanup at ${new Date().toISOString()}`);
-//     let cleanupCount = 0;
+setInterval(() => {
+    const now = Date.now();
+    console.log(`[Session Cleanup] Running cleanup at ${new Date().toISOString()}`);
+    let cleanupCount = 0;
 
-//     for (const [sessionId, session] of sessions) {
-//         if (now - session.lastAccessed > 30 * 60 * 1000) { // 30 minutes
-//             sessions.delete(sessionId);
-//             cleanupCount++;
-//             console.log(`[Session Cleanup] Removed expired session: ${sessionId}`);
-//         }
-//     }
+    for (const [sessionId, session] of sessions) {
+        if (now - session.lastAccessed > 3 * 60 * 1000) { // 30 minutes
+            sessions.delete(sessionId);
+            cleanupCount++;
+            console.log(`[Session Cleanup] Removed expired session: ${sessionId}`);
+        }
+    }
 
-//     console.log(`[Session Cleanup] Removed ${cleanupCount} expired sessions`);
-// }, 60 * 1000);
+    console.log(`[Session Cleanup] Removed ${cleanupCount} expired sessions`);
+}, 60 * 1000);
 
 export const sessionManager = {
     async createSession(id) {
@@ -38,8 +38,9 @@ export const sessionManager = {
             lastMessage: '',
             resourceName: null,
             resourceId: null,
+            ai_preset_id: null,
             createdAt: new Date(),
-            expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min session
+            expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 30 min session
             history: [],
             status: 'followup',
             conversation_id: conversation.id
@@ -47,7 +48,6 @@ export const sessionManager = {
 
 
 
-        console.log(conversation, 'connvv')
         conversation.metadata = session;
         await conversation.save()
         sessions.set(sessionId, session);
@@ -60,7 +60,6 @@ export const sessionManager = {
         let session = sessions.get(sessionId);
 
         // let session = conversation?.metadata;
-        console.log(session, 'sss')
         if (session && session?.id) {
             session.lastAccessed = Date.now();
             // console.log(`[Session] Session found: ${JSON.stringify(session, null, 2)}`);
@@ -72,7 +71,6 @@ export const sessionManager = {
             console.log(`[Session] Session not found: ${sessionId}`);
             session = undefined
         }
-        console.log(session, 'sesss')
         return session;
     },
 

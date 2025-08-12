@@ -40,6 +40,20 @@ export default ({ sequelize }, DataTypes) => {
             type: DataTypes.TEXT,
             allowNull: false
         },
+        prompt_instruction: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        system_prompt: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        pre_hooks: {
+            type: DataTypes.JSONB
+        },
+        post_hooks: {
+            type: DataTypes.JSONB
+        },
         metadata: {
             type: DataTypes.JSONB,
             defaultValue: {}
@@ -69,17 +83,20 @@ export default ({ sequelize }, DataTypes) => {
         },
         output_schema: {
             type: DataTypes.JSONB,
-            allowNull: false
+            allowNull: true
         },
         options: {
             type: DataTypes.JSONB,
-            defaultValue: {}
+            defaultValue: {
+
+            }
         },
         parameters: {
             type: DataTypes.JSONB,
             defaultValue: {
                 temperature: 0.3,
-                num_ctx: 4096
+                num_ctx: 4096,
+                top_p: 40
             }
         },
         anti_hallucination_rules: {

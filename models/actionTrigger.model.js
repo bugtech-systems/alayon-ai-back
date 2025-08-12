@@ -18,15 +18,16 @@ export default ({ sequelize }, DataTypes) => {
         tool_type: {
             type: DataTypes.ENUM(
                 'SMS',
-                'Email',
+                'EMAIL',
                 'API_CALL',
-                'DB_OPERATION',
+                'AI_ACTION',
+                'DB_QUERY',
                 'SCRIPT',
                 'COMPOSITE',
                 'SPEAK'
             ),
             allowNull: true,
-            defaultValue: "DB_OPERATION"
+            defaultValue: "DB_QUERY"
         },
         trigger_config: {
             type: DataTypes.JSONB,

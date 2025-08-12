@@ -140,7 +140,6 @@ async function seedAiPreset() {
                     await db.AiPreset.update({ ...moreData, options }, { where: { id: existingResource.id } })
                     // await transaction.rollback();
                     await transaction.commit();
-
                     continue;
                 }
 

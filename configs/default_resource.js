@@ -207,5 +207,60 @@ export const action_templates = [
                 "default_value": {}
             }
         ]
+    },
+    {
+        "name": "send_email",
+        "tool_type": "EMAIL",
+        "description": "Send email to one or multiple recipients with HTML content and attachments.",
+        "output_as": "resource",
+        "config": {
+            "from": "{{params.from}}",
+            "to": "{{params.to}}",
+            "subject": "{{params.subject}}",
+            "body": "{{params.body}}",
+            "attachments": "{{params.attachments}}"
+        },
+        "parameters": [
+            {
+                "field_name": "from",
+                "data_type": "string",
+                "is_required": true,
+                "validation": "email",
+                "description": "Sender email address"
+            },
+            {
+                "field_name": "to",
+                "data_type": "string",
+                "is_required": true,
+                "validation": "email",
+                "description": "Recipient email(s)"
+            },
+            {
+                "field_name": "subject",
+                "data_type": "string",
+                "is_required": true,
+                "description": "Email subject line"
+            },
+            {
+                "field_name": "body",
+                "data_type": "string",
+                "is_required": true,
+                "description": "HTML email content"
+            },
+            {
+                "field_name": "attachments",
+                "data_type": "array",
+                "is_required": false,
+                "description": "Array of attachment objects",
+                "structure": [
+                    {
+                        "filename": "string",
+                        "path": "string",
+                        "contentType": "string"
+                    }
+                ]
+            }
+        ],
+
     }
 ]

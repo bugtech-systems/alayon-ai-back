@@ -64,6 +64,11 @@ function defineAssociations() {
         as: 'parent'
     });
 
+    db.ResourceTag.belongsTo(db.ResourceTag, {
+        foreignKey: 'tenant_id',
+        as: 'tenant'
+    });
+
     db.ResourceTag.hasMany(db.ResourceField, {
         foreignKey: 'resource_tag_id',
         as: 'fields',
@@ -123,10 +128,26 @@ function defineAssociations() {
         as: 'target_resource'
     });
 
-    // ActionTemplate associations
+
     db.ActionTemplate.belongsTo(db.ResourceTag, {
-        foreignKey: 'target_resource_type_id',
-        as: 'target_resource_type'
+        foreignKey: 'tenant_id',
+        as: 'tenant'
+    });
+
+    db.Conversation.belongsTo(db.ResourceTag, {
+        foreignKey: 'tenant_id',
+        as: 'tenant'
+    });
+
+    db.AiPreset.belongsTo(db.ResourceTag, {
+        foreignKey: 'tenant_id',
+        as: 'tenant'
+    });
+
+
+    db.ResourceRelationship.belongsTo(db.ResourceTag, {
+        foreignKey: 'tenant_id',
+        as: 'tenant'
     });
 
     db.ResourceTag.hasMany(db.ActionTemplate, {
@@ -144,6 +165,21 @@ function defineAssociations() {
     db.Conversation.belongsTo(db.AiPreset, {
         foreignKey: 'ai_preset_id',
         as: 'conversation_ai'
+    });
+
+    db.AiPreset.hasMany(db.Message, {
+        foreignKey: 'ai_preset_id',
+        as: 'message_ai'
+    });
+
+    db.Message.belongsTo(db.AiPreset, {
+        foreignKey: 'ai_preset_id',
+        as: 'message_ai'
+    });
+
+    db.ActionTemplate.belongsTo(db.AiPreset, {
+        foreignKey: 'ai_preset_id',
+        as: 'template_ai'
     });
     // Define relationships
 

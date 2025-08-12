@@ -21,13 +21,14 @@ export default ({ sequelize }, DataTypes) => {
                 'SMS',
                 'EMAIL',
                 'API_CALL',
-                'DB_OPERATION',
+                'AI_ACTION',
+                'DB_QUERY',
                 'SCRIPT',
                 'COMPOSITE',
                 'SPEAK'
             ),
             allowNull: true,
-            defaultValue: "DB_OPERATION"
+            defaultValue: "DB_QUERY"
         },
         config: {
             type: DataTypes.JSONB,
@@ -55,9 +56,6 @@ export default ({ sequelize }, DataTypes) => {
             type: DataTypes.JSONB
         },
         post_hooks: {
-            type: DataTypes.JSONB
-        },
-        ai_config: {
             type: DataTypes.JSONB
         },
         parameters: {

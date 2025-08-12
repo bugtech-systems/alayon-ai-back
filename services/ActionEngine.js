@@ -3,7 +3,9 @@ import { sendEmail, sendSMS, sendSpeak } from './communicationService.js';
 import * as expressionEvaluator from './expressionEvaluator.js';
 import axios from 'axios';
 import { findActionTemplateByName } from './ResourceService.js';
-import { resolveConfig, resolveParameters } from '../helpers/parameterResolver.js';
+import { AIAgent } from '../services/aiAgent.js';
+import { sessionManager } from '../services/sessionStore.js';
+import { resolveConfig } from '../helpers/parameterResolver.js';
 
 // Unique ID generator for executions
 const generateExecutionId = () =>
@@ -16,6 +18,7 @@ export class ActionEngine {
     constructor() {
         this.context = {};
         this.executionId = null;
+
     }
 
     /**
@@ -57,13 +60,15 @@ export class ActionEngine {
                 await this.processHooks(template.pre_hooks, baseContext);
             }
 
-
             // Execute main action
             const result = await this.executeAction(template, baseContext);
 
             // Store main result
             baseContext.outputs.main = result;
 
+
+
+            console.log('POST HOOKS', baseContext)
             // Process post-hooks
             if (template.post_hooks) {
                 await this.processHooks(template.post_hooks, baseContext);
@@ -108,12 +113,14 @@ export class ActionEngine {
             if (!hookTemplate) continue;
 
             // Resolve hook parameters
-            const hookParams = expressionEvaluator.resolveFieldMappings(
-                resolveConfig(hook.parameters || {}, context),
+            const hookParams = await expressionEvaluator.evaluatePlaceholders(
+                hook.parameters,
                 context
             );
 
-            console.log(hookParams, 'HHOOOOK')
+
+            console.log(hookParams, hook.parameters, 'HOOK PARAMS', context,)
+
             // Execute hook
             const hookResult = await this.executeAction(hookTemplate, {
                 ...context,
@@ -121,13 +128,13 @@ export class ActionEngine {
             });
 
 
-            console.log(hookResult, 'HHOOOOK RES')
 
             // console.log(hook, 'hoook', template)
             let output = hook.output_as ? hook.output_as : hookTemplate?.output_as ? hookTemplate?.output_as : name
             // Store hook output
             context.outputs[output] = hookResult;
-            console.log(context, 'hoookcobtext')
+
+
         }
     }
 
@@ -138,17 +145,15 @@ export class ActionEngine {
      * @returns {Promise<object>} Action result
      */
     async executeAction(temp, context) {
-        const template = await db.ActionTemplate.findByPk(temp.id);
+        const template = temp;
         // Resolve field mappings in config
 
-
-        console.log(template.config, context, 'temp conf')
-
-        const resolvedConfigs = expressionEvaluator.resolveFieldMappings(
-            resolveConfig(template.config, context),
+        const resolvedConfigs = await expressionEvaluator.evaluatePlaceholders(
+            template.config,
             context
         );
 
+        console.log(template.config, context, resolvedConfigs, 'EXECUTE')
 
         // Evaluate conditions
         if (template.conditions && !this.evaluateConditions(template.conditions, context.params)) {
@@ -156,14 +161,19 @@ export class ActionEngine {
         }
 
 
+        // console.log(resolvedConfigs, context, resolvePlaceholders(template.config, context), 'RESOLVE PLACE HOLDERS', evaluateStringExpression(JSON.stringify(template.config), context))
+
+
         // Execute based on tool type
         switch (template.tool_type) {
             case 'SMS':
-                return sendSMS(resolvedConfigs);
+                return sendSMS({ ...template.config, ...resolvedConfigs, ...context.params });
             case 'EMAIL':
                 return sendEmail(resolvedConfigs);
             case 'API_CALL':
-                return this.callAPI(resolvedConfigs, context);
+                return this.callAPI(resolvedConfigs);
+            case 'AI_ACTION':
+                return this.callAI(resolvedConfigs, context);
             case 'DB_OPERATION':
                 return this.dbOperation(resolvedConfigs);
             case 'COMPOSITE':
@@ -171,7 +181,7 @@ export class ActionEngine {
             case 'SCRIPT':
                 return this.executeScript(resolvedConfigs, context);
             case 'SPEAK':
-                return sendSpeak(resolvedConfigs);
+                return sendSpeak(resolvedConfigs, context);
             default:
                 throw new Error(`Unsupported tool type: ${template.tool_type}`);
         }
@@ -241,13 +251,14 @@ export class ActionEngine {
     async callAPI(config) {
         try {
             const { method, url, headers, body } = config;
-            console.log(config, 'API CALL CONFIG')
             const response = await axios({
                 method: method || 'GET',
                 url,
-                headers,
                 data: body
             });
+
+
+            console.log(response.data, 'API CALL RESPONSE')
 
             return response.data
         } catch (err) {
@@ -257,10 +268,61 @@ export class ActionEngine {
 
     }
 
+    async callAI(config, context) {
+        const { conversation_id, message, model_name, system_prompt, temperature, num_ctx, top_p } = config;
+
+        let session = await sessionManager.getSession(conversation_id);
+        let newMessage = expressionEvaluator.evaluatePlaceholders(message, context)
+
+
+        try {
+
+            if (!session) {
+                console.log('[Session] Creating new session');
+                session = await sessionManager.createSession(conversation_id);
+
+            } else {
+                console.log(`[Session] Using existing session: ${session.id}`);
+            }
+
+
+
+            /*      const response = await axios({
+                     method: method || 'GET',
+                     url,
+                     headers,
+                     data: body
+                 }); */
+
+
+            const agent = new AIAgent(model_name, session.conversation_id);
+
+
+
+            await agent.initialize(context);
+
+            console.log('[MESSAGE] Processing user input...', newMessage);
+            const response = await agent.generate(newMessage, { temperature, num_ctx, top_p });
+
+
+
+
+            console.log('AGENT', response)
+            return response
+        } catch (err) {
+            console.log('AI ERROR', err)
+            throw new Error(`Unsupported api call: ${err}`);
+        }
+
+    }
+
     async dbOperation(config) {
         const { model, operation, query, data } = config;
         // In a real implementation, this would reference Sequelize models
 
+
+
+        console.log(config, 'DB OPERATION')
         switch (operation) {
             case 'delete':
                 return db[model].destroy(query);
@@ -269,6 +331,8 @@ export class ActionEngine {
             case 'create':
                 return db[model].create(data);
             case 'find':
+                return db[model].findAll(query);
+            case 'read':
                 return db[model].findAll(query);
             default:
                 throw new Error(`Unsupported DB operation: ${operation}`);

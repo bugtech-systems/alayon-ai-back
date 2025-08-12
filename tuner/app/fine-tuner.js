@@ -1,8 +1,10 @@
 import { db } from '../../models/index.js';
 import { Op } from 'sequelize';
+
 import { ModelDeployer } from './model-deployer.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { DEFAULT_MODELS } from '../../configs/default_models.js';
 
 export class FineTuner {
     /**
@@ -29,11 +31,45 @@ export class FineTuner {
 
         const trainingData = [];
 
+
+
+        let defaultMessages = DEFAULT_MODELS.find(a => a.name == model.name).messages
+
+
+        console.log(defaultMessages, 'DEFAULT')
+
+        if (defaultMessages) {
+            let messages = [...defaultMessages];
+
+            console.log(messages, 'MESSAGES')
+
+
+            // Group into user-assistant pairs
+            for (let i = 0; i < messages.length; i++) {
+                if (messages[i].role === 'user' &&
+                    messages[i + 1]?.role === 'assistant') {
+                    trainingData.push({
+                        user: messages[i].content,
+                        assistant: messages[i + 1].content,
+                        confidence: messages[i + 1].confidence_score
+                    });
+                    i++; // Skip assistant message
+                }
+            }
+        }
+
+
         for (const conversation of conversations) {
-            const messages = await db.Message.findAll({
+            let messages = await db.Message.findAll({
                 where: { conversation_id: conversation.id },
                 order: [['created_at', 'ASC']]
             });
+
+            console.log(messages, 'MESSAGES')
+
+            if (defaultMessages) {
+                messages = [...messages, ...defaultMessages];
+            }
 
             console.log(messages, 'MESSAGES')
 
@@ -109,6 +145,9 @@ export class FineTuner {
 
         // Get training data
         const trainingData = await this.getTrainingData(modelId);
+
+
+        console.log(trainingData, 'TRAINING DATA')
         if (trainingData.length < 1) {
             throw new Error('Insufficient training data');
         }
@@ -136,7 +175,8 @@ export class FineTuner {
             base_model: model.name
         });
 
-        return newModel;
+
+        return { newModel, messages: trainingData };
     }
 
     static async generateFineTuneModelfile(model, trainingFile) {

@@ -390,16 +390,22 @@ export async function processTemplatePrompt(prompt, context) {
 
     //     // Structured prompt for Ollama
     const message = `
-      Extract key-value pairs from the conversation below to populate the ""parameters"" object for a ${template.tool_type} action.
+      Extract key-value pairs from the conversation below to populate the ""parameters"" and ""template_output"" object for a ${template.tool_type} action.
       - Preserve the original template "placeholders" (e.g., {{params.email}}).
-      - Only extract values explicitly mentioned in the conversation or parameters context.
+      - Only extract values explicitly mentioned in the conversation or "Template Fields" context.
       - Never invent or assume values.
       - Customize template value contents according to the prompt.
-      - Strictly follow this JSON schema:
-        ${JSON.stringify(default_schema[resource_type], null, 2)}
 
-      **Template**: ${JSON.stringify(configTemplate, null, 2)}
-      **Parameters**:  "${JSON.stringify(template.parameters, null, 2)}"
+
+      **Template config**: "${JSON.stringify(template.config, null, 2)}"
+      **Template fields**:  "${JSON.stringify(template.parameters, null, 2)}"
+      
+      **output_schema**: {
+         action_type: "string",
+         parameters: "object",
+         template_output: "object",
+         missing_fields: "array",
+      }
       `
 
 

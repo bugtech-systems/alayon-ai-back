@@ -1,7 +1,6 @@
 import express from 'express';
 import resourceService from '../services/ResourceApiService.js';
 import { db } from '../models/index.js';
-import ResourceApiService from '../services/ResourceApiService.js';
 
 const router = express.Router();
 
@@ -11,23 +10,16 @@ const router = express.Router();
 const formatResourceResponse = (resource, connection) => {
     if (!resource) return null;
 
-
-
-
-
     // Format relationships into grouped object
     const formattedRelationships = {};
     if (connection && resource.incoming_relationships) {
-        let relate = 'incoming_relationships'
+        let relate = 'incoming_relationships';
         resource[relate].forEach(relationship => {
-
-
             const relatedResource = relationship.target_resource || relationship.source_resource;
             if (relatedResource && (String(relatedResource.resource_name).toLowerCase() == String(connection).toLowerCase())) {
                 if (!formattedRelationships[relatedResource.resource_name]) {
                     formattedRelationships[relatedResource.resource_name] = [];
                 }
-
 
                 formattedRelationships[relatedResource.resource_name].push({
                     id: relatedResource.id,
@@ -50,10 +42,8 @@ const formatResourceResponse = (resource, connection) => {
     }
 
     if (connection && resource.outgoing_relationships) {
-        let relate = 'outgoing_relationships'
+        let relate = 'outgoing_relationships';
         resource[relate].forEach(relationship => {
-
-
             const relatedResource = relationship.target_resource || relationship.source_resource;
             if (relatedResource && (String(relatedResource.resource_name).toLowerCase() == String(connection).toLowerCase())) {
                 if (!formattedRelationships[relatedResource.resource_name]) {
@@ -83,13 +73,11 @@ const formatResourceResponse = (resource, connection) => {
         id: resource.id,
         resource_type: 'resource',
         resource_name: resource.resource_name,
+        tenant_id: resource.tenant_id,
         attributes: {
             ...resource.attributes,
-            // Explicitly exclude relationships to avoid circular references
         },
         relationships: connection ? formattedRelationships : {},
-        // incoming_relationships: undefined,
-        // outgoing_relationships: undefined,
         meta: {
             is_deleted: resource.is_deleted,
             is_active: resource.is_active,
@@ -98,6 +86,19 @@ const formatResourceResponse = (resource, connection) => {
         }
     };
 };
+
+// Middleware to ensure tenant_id is available
+// router.use((req, res, next) => {
+//     if (!req.tenantId) {
+//         return res.status(400).json({
+//             error: {
+//                 status: 400,
+//                 message: 'Tenant ID is required'
+//             }
+//         });
+//     }
+//     next();
+// });
 
 router.post('/', async (req, res) => {
     const { relationship } = req.query;
@@ -125,14 +126,13 @@ router.post('/', async (req, res) => {
             });
         }
 
-        //Validate of resource-type exists.
-
-
-
-
-
         const resource = await resourceService.createResource(
-            { resource_name: String(resource_name).toLowerCase(), attributes, relationships },
+            {
+                resource_name: String(resource_name).toLowerCase(),
+                attributes,
+                relationships,
+                tenant_id: req.tenantId
+            },
             transaction
         );
 
@@ -179,7 +179,7 @@ router.get('/:id', async (req, res, next) => {
     try {
         const { relationship } = req.query;
 
-        const resource = await resourceService.getResourceById(req.params.id);
+        const resource = await resourceService.getResourceById(req.params.id, req.tenantId);
         if (!resource) {
             return res.status(404).json({
                 error: {
@@ -196,8 +196,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.get('/type/:typeId', async (req, res, next) => {
     try {
-
-        const resources = await resourceService.getResourcesByType(req.params.typeId);
+        const resources = await resourceService.getResourcesByType(req.params.typeId, req.tenantId);
         const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues));
 
         return res.status(200).json({
@@ -213,8 +212,7 @@ router.get('/type/:typeId', async (req, res, next) => {
 
 router.get('/type/:typeId/:relationship', async (req, res, next) => {
     try {
-
-        const resources = await resourceService.getResourcesByType(req.params.typeId);
+        const resources = await resourceService.getResourcesByType(req.params.typeId, req.tenantId);
         const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues, req.params.relationship));
 
         return res.status(200).json({
@@ -232,7 +230,7 @@ router.get('/:id/:relationship', async (req, res, next) => {
     try {
         const { relationship } = req.params;
 
-        const resource = await resourceService.getResourceById(req.params.id);
+        const resource = await resourceService.getResourceById(req.params.id, req.tenantId);
         if (!resource) {
             return res.status(404).json({
                 error: {
@@ -253,7 +251,11 @@ router.put('/:id', async (req, res) => {
         const { name, attributes } = req.body;
         const resource = await resourceService.updateResource(
             req.params.id,
-            { name, attributes },
+            {
+                name,
+                attributes,
+                tenant_id: req.tenantId
+            },
             transaction
         );
 
@@ -310,6 +312,7 @@ router.delete('/:id', async (req, res) => {
     try {
         const { resource, is_deleted } = await resourceService.toggleDeleteResource(
             req.params.id,
+            req.tenantId,
             transaction
         );
 

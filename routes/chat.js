@@ -2,18 +2,13 @@ import express from 'express';
 import { db } from '../models/index.js';
 import aiService from '../services/aiServices.js';
 import { executeTemplate, getActionTemplates, handleCreate, handleRead } from '../services/ActionTemplateService.js';
-import { voicespeak } from '../speak.js';
 import { sessionManager } from '../services/sessionStore.js';
-import { findActionTemplateByName, findResourceByName, getResourceTypes } from '../services/ResourceService.js';
-import { findBestMatch, findMatchAction, processActionPrompt, processTemplatePrompt } from '../services/ollamaService.js';
-import AgenticAIService from '../services/agenticService.js';
-import actionTemplateService from '../services/ActionTemplateService1.js';
+import { processActionPrompt, processTemplatePrompt } from '../services/ollamaService.js';
 import Redis from 'ioredis';
-import { processMessage, confirmOperation, switchModel, generateAIResponse } from '../helpers/ollamaHelpers.js';
+import { confirmOperation } from '../helpers/ollamaHelpers.js';
 import { ActionEngine } from '../services/ActionEngine.js';
 import { ActionService } from '../services/ActionTriggerService.js';
-import { parseTrigger } from '../services/TriggerParser.js';
-import { AIAgent } from '../tuner/app/ai-agent.js';
+import { AIAgent } from '../services/aiAgent.js';
 
 const actionEngine = new ActionEngine();
 
@@ -27,10 +22,6 @@ const SESSION_TTL = 60 * 60 * 2; // 2 hours
 
 // Store conversation state in memory (for production use Redis)
 
-
-const agenticService = new AgenticAIService(db);
-
-// Enhanced AI Service with All Features
 
 
 router.post('/alayon', async (req, res) => {
@@ -56,8 +47,8 @@ router.post('/alayon', async (req, res) => {
         if (!action.selected_template) {
             const formattedResponse = await aiService.formatResultsForUser(
                 [],
-                message,
-                action.error
+                `No action allowed to process: ${message}`,
+                'No Action template!'
             );
 
             return res.status(400).json({
@@ -81,43 +72,55 @@ router.post('/alayon', async (req, res) => {
         sessionManager.updateSession(session.id, session)
 
 
-        let trgr = parseTrigger(message);
-        console.log(trgr, 'TRIGGER', action.template, actionTemplate)
         if (action.trigger_type !== 'IMMEDIATE') {
             const trigger = await db.ActionTrigger.create({
                 ...req.body,
+                trigger_config: action.trigger_config,
+                trigger_type: action.trigger_type,
                 action_template_id: action.template.id,
                 tool_type: action.template.tool_type,
-                parameters: req.body.parameters
+                parameters: actionTemplate.parameters
             });
 
+
+            console.log({
+                ...req.body,
+                trigger_config: action.trigger_config,
+                trigger_type: action.trigger_type,
+                action_template_id: action.template.id,
+                tool_type: action.template.tool_type,
+                parameters: actionTemplate.parameters
+            }, 'trrgg')
+
             result = await ActionService.scheduleTrigger(trigger);
-            return res.status(200).json(result)
+            return res.status(200).json({
+                result,
+                message: `${action.trigger_type} Action Executed!`
+            })
         } else {
             // this.executeImmediately(trigger);
-            // console.log(action, actionTemplate, 'trrrr')
+            console.log(action, actionTemplate, 'trrrr immed')
             result = await actionEngine.execute(
                 action.template.id,
                 actionTemplate.parameters
             );
 
-            console.log(result, 'RESSS')
-            return res.status(200).json(result)
+            return res.status(200).json({
+                result,
+                message: 'Immediate Action Executed!'
+            })
         }
 
         // return res.status(200).json({ message: 'Success', actionTemplate, action, session });
 
 
     } catch (error) {
-        console.log(error, 'ERRRR',
-            error.details,
-            error.message,
-            error.name)
+        console.log(error, 'ERRRR')
 
         const formattedResponse = await aiService.formatResultsForUser(
             [],
             message,
-            error.message
+            'Error Response'
         );
 
         return res.status(500).json({ message: formattedResponse });
@@ -171,7 +174,6 @@ router.post('/conversation', async (req, res) => {
 
 
 
-    console.log(session, 'sssssss')
     try {
 
         if (!session) {
@@ -247,6 +249,202 @@ router.post('/conversation', async (req, res) => {
         });
     } catch (error) {
         console.log(error, 'ERRR')
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/preset/:id', async (req, res) => {
+    const modelId = req.params.id;
+    const { message, conversation_id, options } = req.body;
+
+    let session = await sessionManager.getSession(conversation_id);
+
+
+
+    try {
+
+        if (!session) {
+            console.log('[Session] Creating new session');
+            session = await sessionManager.createSession(conversation_id);
+
+        } else {
+            console.log(`[Session] Using existing session: ${session.id}`);
+        }
+
+
+
+        session.ai_preset_id = modelId;
+        sessionManager.updateSession(session.id, session)
+
+
+
+
+        console.log(session, 'SESSH', modelId)
+
+
+        const agent = new AIAgent(session.ai_preset_id, session.conversation_id);
+
+        await agent.initialize(session.context);
+
+        console.log('[MESSAGE] Processing user input...');
+        const response = await agent.generate(message, options);
+
+
+        console.log('[AI MESSAGE] response...', response);
+        return res.status(200).json({
+            // message: formattedResponse,
+            data: response,
+            session: session,
+            sessionId: session.id,
+            // action: ollamaResponse
+        });
+    } catch (error) {
+        console.log(error, 'ERRR')
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/train/:id', async (req, res) => {
+    const messageId = req.params.id;
+
+
+
+    try {
+
+        if (!messageId) {
+            return res.status(400).json({ error: "Missing message id." });
+        }
+
+        const message = await db.Message.findByPk(messageId);
+
+        if (!message) {
+            return res.status(404).json({
+                error: `Message with id ${messageId} not found.`
+            });
+        }
+
+
+        const trained = await db.Message.update({ is_training_candidate: !message.is_training_candidate }, {
+            where: { id: messageId }
+        });
+
+
+
+
+        return res.status(200).json({
+            message: 'Trained Successfully',
+            data: trained
+        });
+
+
+
+        /*     return res.status(200).json({
+                // message: formattedResponse,
+                data: response,
+                session: session,
+                sessionId: session.id,
+                // action: ollamaResponse
+            }); */
+    } catch (error) {
+        console.log(error, 'ERRR')
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/preset/:id', async (req, res) => {
+    const modelId = req.params.id;
+    const conversation_id = req.query.conversation_id
+    let session = await sessionManager.getSession(conversation_id);
+
+
+
+    console.log(session, 'sssssss', modelId)
+    try {
+
+
+        if (!session) {
+            console.log('[Session] Creating new session');
+            session = await sessionManager.createSession(conversation_id);
+            session.ai_preset_id = modelId;
+            sessionManager.updateSession(session.id, session)
+
+        } else {
+            console.log(`[Session] Using existing session: ${session.id}`);
+        }
+
+
+
+
+
+        const { page = 1, limit = 20, sort = 'DESC' } = req.query;
+        const offset = (page - 1) * limit;
+
+        const result = await db.Message.findAndCountAll({
+            limit: parseInt(limit),
+            order: [['created_at', sort]],
+            offset: parseInt(offset),
+            where: { ai_preset_id: req.params.id }
+        });
+
+        res.status(200).json({
+            data: result.rows,
+            meta: {
+                total: result.count,
+                page: parseInt(page),
+                totalPages: Math.ceil(result.count / limit)
+            }
+        });
+
+
+
+        /*     return res.status(200).json({
+                // message: formattedResponse,
+                data: response,
+                session: session,
+                sessionId: session.id,
+                // action: ollamaResponse
+            }); */
+    } catch (error) {
+        console.log(error, 'ERRR')
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.delete('/preset/:id', async (req, res) => {
+    const messageId = req.params.id;
+
+
+
+    try {
+
+        if (!messageId) {
+            return res.status(400).json({ error: "Missing message id." });
+        }
+
+
+        const deleted = await db.Message.destroy({
+            where: { id: messageId }
+        });
+
+
+
+
+        return res.status(200).json({
+            message: 'Deleted Successfully',
+            data: deleted
+        });
+
+
+
+        /*     return res.status(200).json({
+                // message: formattedResponse,
+                data: response,
+                session: session,
+                sessionId: session.id,
+                // action: ollamaResponse
+            }); */
+    } catch (error) {
+        console.log(error, 'ERRR')
         res.status(500).json({ error: error.message });
     }
 });
@@ -267,6 +465,31 @@ router.post('/confirm', async (req, res) => {
 
         res.json({ message: result, sessionId: session.id });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update - PUT /presets/:id
+router.put('/message/:id', async (req, res) => {
+    const { content } = req.body;
+
+    try {
+
+        const [affectedRows] = await db.Message.update({ content }, {
+            where: { id: req.params.id },
+            individualHooks: true,
+        });
+
+        if (affectedRows === 0) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+
+        const updatedPreset = await db.Message.findByPk(req.params.id);
+        // await ModelDeployer.deployModel(updatedPreset.id, t);
+
+        return res.json({ message: 'Message updated successfully', data: updatedPreset });
+    }
+    catch (error) {
         res.status(500).json({ error: error.message });
     }
 });

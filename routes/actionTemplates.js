@@ -3,8 +3,9 @@ import express from 'express';
 import { db } from '../models/index.js';
 import { ActionEngine } from '../services/ActionEngine.js';
 import { ActionService } from '../services/ActionTriggerService.js';
-import { generateExecutionId } from '../helpers/helpers.js';
 import { findActionTemplateByName } from '../services/ResourceService.js';
+import { AIAgent } from '../services/aiAgent.js';
+import { sessionManager } from '../services/sessionStore.js';
 
 const actionEngine = new ActionEngine();
 
@@ -23,21 +24,29 @@ router.post('/', async (req, res, next) => {
 
 // Execute an action template
 router.post('/:templateId/execute', async (req, res) => {
+    const { conversation_id } = req.body;
+
+
+
     try {
+
 
 
         let template = await findActionTemplateByName(req.params.templateId);
         // let result;
 
 
-        console.log(template, 'TEMP')
 
         if (!template) return res.status(400).json({ message: "Template doesn't exist." })
 
 
+
+
+
+
         // Validate parameters against template requirements
         const validationErrors = [];
-        const parameters = req.body.parameters;
+        const parameters = req.body?.parameters ? req.body?.parameters : {};
         // 1. Check for missing required parameters
         const missingRequiredParams = template.parameters
             .filter(p => p.is_required && !parameters.hasOwnProperty(p.field_name) && !p.default_value)
@@ -128,12 +137,15 @@ router.post('/:templateId/execute', async (req, res) => {
         });
 
 
-        console.log(trigger, template, req.body.parameters, 'temp')
+
+
+
+        console.log(trigger, 'TRIGGER', template)
+
 
         if (trigger.trigger_type !== 'IMMEDIATE') {
             await ActionService.scheduleTrigger(trigger);
         } else {
-
             // this.executeImmediately(trigger);
             result = await actionEngine.execute(
                 template.id,
@@ -146,8 +158,183 @@ router.post('/:templateId/execute', async (req, res) => {
 
 
 
-        res.json(result);
+        res.status(200).json({
+            status: 200,
+            data: result
+        });
     } catch (error) {
+        console.log(error, "ERRORrr")
+        res.status(400).json({
+            error: error?.message,
+            details: error?.details
+        });
+    }
+});
+
+router.post('/:templateId/chat', async (req, res) => {
+    const { conversation_id, message } = req.body;
+
+    let session = await sessionManager.getSession(conversation_id);
+    // let session = sessionManager.getSession('session_420230');
+
+
+
+    try {
+
+        if (!session) {
+            console.log('[Session] Creating new session');
+            session = await sessionManager.createSession(conversation_id);
+
+        } else {
+            console.log(`[Session] Using existing session: ${session.id}`);
+        }
+
+
+
+        let template = await findActionTemplateByName(req.params.templateId);
+        // let result;
+
+
+
+        if (!template) return res.status(400).json({ message: "Template doesn't exist." })
+
+
+        const agent = new AIAgent(template.ai_preset_id, session.conversation_id);
+
+
+
+
+        await agent.initializeAction(session, template.id);
+
+        console.log('[MESSAGE] Processing user input...');
+        const response = await agent.generate(message);
+
+
+        console.log('[MESSAGE] Action processed', response);
+
+
+
+
+
+
+
+
+        // Validate parameters against template requirements
+        const validationErrors = [];
+        const parameters = response.parameters;
+        // 1. Check for missing required parameters
+        const missingRequiredParams = template.parameters
+            .filter(p => p.is_required && !parameters.hasOwnProperty(p.field_name) && !p.default_value)
+            .map(p => p.field_name);
+
+        if (missingRequiredParams.length > 0) {
+            validationErrors.push({
+                type: 'MISSING_REQUIRED',
+                message: 'Missing required parameters',
+                details: missingRequiredParams
+            });
+        }
+
+        // 2. Check for parameters not defined in the template
+        const allowedParamNames = template.parameters.map(p => p.field_name);
+        const extraParams = Object.keys(parameters).filter(
+            paramName => !allowedParamNames.includes(paramName)
+        );
+
+        if (extraParams.length > 0) {
+            validationErrors.push({
+                type: 'EXTRA_PARAMETERS',
+                message: 'Parameters not allowed by template',
+                details: extraParams
+            });
+        }
+
+        // 3. Validate parameter values against allowed fields (if template has field restrictions)
+        // if (template.allowed_fields && template.allowed_fields.length > 0) {
+        //     const allowedFieldValues = template.allowed_fields.reduce((acc, field) => {
+        //         acc[field.field_name] = field.allowed_values
+        //             ? JSON.parse(field.allowed_values)
+        //             : null;
+        //         return acc;
+        //     }, {});
+
+        //     const invalidFieldValues = [];
+
+        //     for (const [paramName, paramValue] of Object.entries(parameters)) {
+        //         if (allowedFieldValues[paramName] &&
+        //             !allowedFieldValues[paramName].includes(paramValue)) {
+        //             invalidFieldValues.push({
+        //                 parameter: paramName,
+        //                 value: paramValue,
+        //                 allowed: allowedFieldValues[paramName]
+        //             });
+        //         }
+        //     }
+
+        //     if (invalidFieldValues.length > 0) {
+        //         validationErrors.push({
+        //             type: 'INVALID_VALUES',
+        //             message: 'Parameter values not in allowed values',
+        //             details: invalidFieldValues
+        //         });
+        //     }
+        // }
+
+        // 4. Apply default values for missing optional parameters
+        if (template.parameters && template.parameters.length) {
+            for (const param of template.parameters) {
+                if (!parameters.hasOwnProperty(param.field_name) && param.default_value) {
+                    parameters[param.field_name] = param.default_value;
+                }
+            }
+        }
+
+        // Return validation errors if any
+        if (validationErrors.length > 0) {
+            return res.status(400).json({
+                error: 'Parameter validation failed',
+                validationErrors
+            });
+        }
+
+
+
+
+        let result = null;
+
+
+
+        const trigger = await db.ActionTrigger.create({
+            ...req.body,
+            action_template_id: template.id,
+            tool_type: template.tool_type,
+            parameters: parameters
+        });
+
+
+        console.log(trigger, template, parameters, 'temp')
+
+        if (trigger.trigger_type !== 'IMMEDIATE') {
+            await ActionService.scheduleTrigger(trigger);
+        } else {
+            // this.executeImmediately(trigger);
+            result = await actionEngine.execute(
+                template.id,
+                parameters
+            );
+        }
+
+
+
+
+
+
+        res.status(200).json({
+            status: 200,
+            data: result
+        });
+    } catch (error) {
+        console.log(error, 'ERRR')
         // console.log(error, "ERRORrr")
         res.status(400).json({
             error: error?.message,
@@ -268,11 +455,7 @@ router.put('/:id', async (req, res, next) => {
         // Fetch the fully updated template
         const updatedTemplate = await db.ActionTemplate.findByPk(id, {
             include: [
-                {
-                    model: db.ResourceTag,
-                    as: 'target_resource_type',
-                    attributes: ['id', 'resource_name', 'resource_type']
-                },
+
                 // {
                 //     model: db.ActionTemplateParameter,
                 //     as: 'parameters',

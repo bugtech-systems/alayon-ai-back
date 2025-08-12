@@ -26,3 +26,6 @@ session_logs/*
 *.sw?
 
 venv
+tuner
+
+uploads*!SECTION

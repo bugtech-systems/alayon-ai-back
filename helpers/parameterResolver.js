@@ -137,13 +137,39 @@ export const resolveConfig = (config, context = {}) => {
     return result;
 };
 
+export function resolveEmptyConfig(config, params) {
+    // Create a deep copy of the original config to avoid modifying it directly
+    const resolvedConfig = JSON.parse(JSON.stringify(config));
+
+    // Iterate over each property in params
+    for (const key in params) {
+        // Check if the key exists in config and if the config value is "empty"
+        if (resolvedConfig.hasOwnProperty(key)) {
+            if (
+                resolvedConfig[key] === '' ||
+                (Array.isArray(resolvedConfig[key]) && resolvedConfig[key].length === 0) ||
+                resolvedConfig[key] === null ||
+                resolvedConfig[key] === undefined
+            ) {
+                // Replace empty config value with params value
+                resolvedConfig[key] = params[key];
+            }
+        } else {
+            // If the key doesn't exist in config, add it
+            resolvedConfig[key] = params[key];
+        }
+    }
+
+    return resolvedConfig;
+}
+
 /**
  * Resolves all placeholders in a string
  * @param {string} str - String containing placeholders
  * @param {Object} context - Context object
  * @returns {*} Resolved value (may change type if single placeholder)
  */
-function resolveStringPlaceholders(str, context) {
+export function resolveStringPlaceholders(str, context) {
     const placeholderRegex = /\{\{(.+?)\}\}/g;
     const placeholders = [...str.matchAll(placeholderRegex)];
 
@@ -234,4 +260,66 @@ function resolvePath(path, context) {
     }
 
     return current;
+}
+
+
+/**
+ * Absolute guaranteed object formatter
+ */
+function formatObject(value) {
+    if (value === null) return 'null';
+    if (value === undefined) return '';
+
+    // Handle primitive types
+    if (typeof value !== 'object') return String(value);
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+        return `[${value.map(formatObject).join(', ')}]`;
+    }
+
+    // Handle Date objects
+    if (value instanceof Date) return value.toISOString();
+
+    // Handle all other objects
+    try {
+        const entries = Object.entries(value);
+        if (entries.length === 0) return '{}';
+
+        return `{ ${entries.map(([k, v]) => `${k}: ${formatObject(v)}`).join(', ')} }`;
+    } catch {
+        return 'Object';
+    }
+}
+
+/**
+ * Nuclear-proof placeholder resolver
+ */
+export function resolvePlaceholders(str, context) {
+    if (typeof str !== 'string') return str;
+
+    // Handle single placeholder case
+    const singleMatch = str.match(/^{{\s*([^{}\s]+)\s*}}$/);
+    if (singleMatch) {
+        const value = getNestedValue(context, singleMatch[1].trim());
+        return value !== undefined ? value : str;
+    }
+
+    // Handle template strings
+    return str.replace(/{{([^{}]+)}}/g, (match, path) => {
+        const value = getNestedValue(context, path.trim());
+        return value !== undefined ? formatObject(value) : match;
+    });
+}
+
+/**
+ * Deeply gets nested values
+ */
+function getNestedValue(obj, path) {
+    if (!obj || typeof obj !== 'object') return undefined;
+
+    return path.split('.').reduce((acc, part) => {
+        if (acc === null || acc === undefined) return undefined;
+        return acc[part];
+    }, obj);
 }

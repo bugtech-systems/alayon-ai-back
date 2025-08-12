@@ -2,34 +2,92 @@ import 'dotenv';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 import { voicespeak } from '../speak.js';
+import { splitMessageWithPagination } from '../helpers/helpers.js';
 
 
+let system = '639368263352';
 
 // SMS Tool
 export async function sendSMS(config) {
-    const { provider, api_key, recipients, message } = config;
+    const { message_types, recipients, message } = config;
 
-    // Implementation for different SMS providers
-    if (provider === 'twilio') {
-        const response = await axios.post(
-            `https://api.twilio.com/2010-04-01/Accounts/${api_key.account_sid}/Messages.json`,
-            new URLSearchParams({
-                To: recipients.join(','),
-                From: config.from_number,
-                Body: message
-            }),
-            {
-                auth: {
-                    username: api_key.account_sid,
-                    password: api_key.auth_token
+    console.log('Message', config)
+
+    if (recipients.length) {
+        let isSMS = message_types?.includes('SMS');
+        let isFlash = message_types?.includes('FLASH');
+        let isCall = message_types?.includes('CALL');
+
+        let messages = splitMessageWithPagination(message);
+
+        if (isSMS) {
+
+            const response = await axios({
+                method: 'POST',
+                url: 'https://swc.sharewin.pro/api/tasks/sms/bulk',
+                data: {
+                    recipients,
+                    messages,
+                    isFlash: false,
+                    system: system
+
                 }
-            }
-        );
-        return response.data;
+            });
+            console.log('Sms Message', response.data)
+
+        }
+
+        if (isFlash) {
+
+            const response = await axios({
+                method: 'POST',
+                url: 'https://swc.sharewin.pro/api/tasks/sms/bulk',
+                data: {
+                    recipients,
+                    messages,
+                    isFlash: true,
+                    system: system
+                }
+            });
+
+            console.log('FLash Message', response.data)
+        }
+
+        if (isCall) {
+            console.log('Call Message', response.data)
+        }
+
+
+
+        console.log(messages, 'MESSAGES', config)
+        return { message: 'Recipients SMS Processed', messages };
+
+    } else {
+        return { message: 'No Message Recipients' };
     }
 
-    // Add other providers...
+
+
+    // Implementation for different SMS providers
+    /*   if (provider === 'twilio') {
+          const response = await axios.post(
+              `https://api.twilio.com/2010-04-01/Accounts/${api_key.account_sid}/Messages.json`,
+              new URLSearchParams({
+                  To: recipients.join(','),
+                  From: config.from_number,
+                  Body: message
+              }),
+              {
+                  auth: {
+                      username: api_key.account_sid,
+                      password: api_key.auth_token
+                  }
+              }
+          ); */
+
 }
+
+// Add other providers...
 
 // Email Tool
 export async function sendEmail(config) {
@@ -76,6 +134,7 @@ export async function sendSpeak(config) {
     //     html: body,
     //     attachments
     // };
-    return await voicespeak(message);
-
+    console.log(message, 'SPEAK')
+    await voicespeak(message);
+    return message
 }

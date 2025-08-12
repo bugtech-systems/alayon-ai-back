@@ -8,7 +8,17 @@ const OLLAMA_API_URL = 'http://127.0.0.1:11434/api/generate';
  * Strict sanitization for TTS input
  */
 function sanitizeText(text) {
-    return text
+
+    let newText = '';
+
+    if (typeof text != 'string') {
+        newText = JSON.stringify(text);
+    } else {
+        newText = text;
+    }
+
+
+    return newText
         .replace(/\\/g, '')       // Remove all backslashes
         .replace(/\n/g, '__')      // Replace newlines with spaces
         .replace(/\s+/g, ' ')     // Collapse multiple spaces
@@ -25,6 +35,7 @@ async function refineTextForSpeech(text, aiModel) {
   2. Use contractions ("you'll", "can't")
   3. Maximum 12 words per clause
   4. NEVER add explanations, note, metadata or extra text or backslash "\\".
+  5. Refine to a message string.
 
   Input: "${text}"
   `;
@@ -38,7 +49,7 @@ async function refineTextForSpeech(text, aiModel) {
             stream: false,
             options: {
                 temperature: 0.1,     // Lower = more deterministic
-                num_ctx: 4048       // Better context understanding
+                num_ctx: 4096      // Better context understanding
             }
         }),
     });
@@ -77,7 +88,6 @@ export async function voicespeak(
         const espeak = spawn(ESPEAK_PATH, args);
         espeak.on('error', (err) => console.error('eSpeak error:', err));
         espeak.on('close', (code) => code !== 0 && console.warn(`eSpeak exited with code ${code}`));
-
     } catch (err) {
         console.error('AI refinement failed, using sanitized text:', err);
         voicespeak(sanitizeText(text), voice, speed, false); // Fallback

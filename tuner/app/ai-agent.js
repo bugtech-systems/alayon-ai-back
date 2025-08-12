@@ -32,7 +32,6 @@ export class AIAgent {
 
 
 
-        console.log(messages, 'mess')
 
         const rawResponse = await this.ollama.chat(
             this.model.name,
@@ -41,6 +40,8 @@ export class AIAgent {
         );
 
         let response = await this.processResponse(rawResponse.content)
+        console.log(messages, 'mess', response)
+
         userMessage.confidence_score = response._confidence;
         userMessage.is_training_candidate = response._confidence >= this.model.min_fine_tune_confidence
         userMessage.save()
@@ -75,20 +76,18 @@ ${this.model.system_instruction}
 2. Previous response as context
 3. Use this EXACT schema:
 ${JSON.stringify(this.model.output_schema, null, 2)}
-4. Select values ONLY from: ${JSON.stringify(this.model.options)}
+4. Select values ONLY from: ${JSON.stringify(this.model.options, null, 2)}
     `.trim();
     }
 
     async processResponse(content) {
         try {
 
-            console.log(content, 'coko')
 
             const response = JSON.parse(content);
 
             // Calculate confidence (simplified example)
             const confidence = this.calculateConfidence(response);
-            console.log(response, confidence, 'process conf')
             // Save assistant message with confidence
             await this.saveMessage('assistant', content, confidence);
 

@@ -125,11 +125,12 @@ export const default_schema = {
 
 
 
-export const DEFAULT_MODELS = [{
-   name: 'template_engine',
-   model_name: "template_engine",
-   base_model: 'mistral:latest',
-   system_instruction: `Role: Template-driven action generator with strict output adherence
+export const DEFAULT_MODELS = [
+   {
+      name: 'template_engine',
+      model_name: "template_engine",
+      base_model: 'mistral:latest',
+      system_instruction: `Role: Template-driven action generator with strict output adherence
 
 ## Core Rules:
 1. TEMPLATE COMPLIANCE
@@ -143,37 +144,98 @@ export const DEFAULT_MODELS = [{
 3. PARAMETER EXTRACTION
    - Populate "parameters" with raw conversation values
    - Never modify or infer values (exact matches only)
-
+   
 4. FIELD VALIDATION
    - Validate against "field_options" when provided
    - Enforce string formats (email, URL) when specified
 `,
-   output_schema: {
-      action_type: "string (predefined template name)",
-      parameters: "object (key-value pairs from conversation)",
-      template_output: "object (template with values applied)",
-      missing_fields: "string[] (required but missing fields)",
-      confidence_score: "number (0-1)"
-   },
-   options: {
-      action_type: ["Email", "SMS", "API_Call", "DB_Query", "Speak"]
-   },
-   parameters: {
-      temperature: 0.0,
-      num_ctx: 4096,
-      num_predict: 512
-   },
-   anti_hallucination_rules: [
-      "Never invent template fields",
-      "Never invent resource_name value",
-      "Preserve placeholder syntax when no match exists",
-      "Reject ambiguous parameter extractions"
-   ]
-}, {
-   name: 'action_selector',
-   model_name: "action_selector",
-   base_model: 'mistral:latest',
-   system_instruction: `Role: Deterministic action-selection engine
+      output_schema: {
+         action_type: "string (predefined template name)",
+         parameters: "object (key-value pairs from config or conversation)",
+         template_output: "object (template with values applied)",
+         missing_fields: "string[] (required but missing fields)",
+         confidence_score: "number (0-1)"
+      },
+      options: {
+         action_type: ["Email", "SMS", "API_Call", "DB_Query", "Speak"]
+      },
+      parameters: {
+         temperature: 0.2,
+         num_ctx: 4096,
+         //     num_predict: 512
+      },
+      anti_hallucination_rules: [
+         "Never invent template fields",
+         "Never invent resource_name value",
+         "Preserve placeholder syntax when no match exists",
+         "Reject ambiguous parameter extractions"
+      ],
+      messages: [
+         // Email Template Use Cases
+         {
+            role: "user",
+            content: "Send an email to jane.doe@company.com with subject 'Project Update' and body 'The deadline has been extended to Friday.'"
+         },
+         {
+            role: "assistant",
+            content: `{
+      "action_type": "EMAIL",
+      "parameters": {
+        "to": "jane.doe@company.com",
+        "subject": "Project Update",
+        "body": "The deadline has been extended to Friday."
+      },
+      "template_output": {
+        "to": "jane.doe@company.com",
+        "subject": "Project Update",
+        "body": "The deadline has been extended to Friday."
+      },
+      "missing_fields": [],
+      "confidence": 5
+    }`
+         },
+         {
+            role: "user",
+            content: "Speak a message Mayda dida? Maupay na kulop. in 30 seconds."
+         },
+         {
+            role: "assistant",
+            content: `{
+      "action_type": "SPEAK",
+      "parameters": {
+        "message": "Mayda dida? Maupay na kulop."
+      },
+      "template_output": {
+              "message": "Mayda dida? Maupay na kulop."
+      },
+      "missing_fields": [],
+      "confidence": 5
+    }`
+         }, {
+            role: "user",
+            content: "Speak a message Mayda dida? Maupay na kulop."
+         },
+         {
+            role: "assistant",
+            content: `{
+      "action_type": "SPEAK",
+      "parameters": {
+        "message": "Mayda dida? Maupay na kulop."
+      },
+      "template_output": {
+              "message": "Mayda dida? Maupay na kulop."
+      },
+      "missing_fields": [],
+      "confidence": 5
+    }`
+         }
+
+      ]
+   }, {
+      name: 'action_selector',
+      model_name: "action_selector",
+      base_model: 'mistral:latest',
+      system_instruction: `Role: Deterministic action-selection engine
 
 ## Processing Rules:
 1. TEMPLATE SELECTION
@@ -194,38 +256,123 @@ export const DEFAULT_MODELS = [{
    | IMMEDIATE  | (default)                | {}                |
    | COUNTDOWN  | "in X [time units]"      | {delay_seconds:N} |
    | SCHEDULED  | "at [time]" / "on [date]"| {datetime:ISO}    |
-   | RECURRING  | "every [interval]"       | {cron:"rule"}     |
+   | RECURRING  | "[* * * * * *]"  | {recurrence_rule:"6 fields rule"}     |
 
 4. RESOURCE TYPING
    - config: Initial setup actions
    - resource: Record operations (default)
    - connect: Relationship management
    `,
-   output_schema: {
-      selected_template: "string (matched template name)",
-      confidence_score: "number (0-1)",
-      trigger_type: "string (IMMEDIATE|COUNTDOWN|SCHEDULED|RECURRING)",
-      trigger_config: "object (trigger-specific parameters)",
-      refined_prompt: "string (optimized input)",
-      resource_name: "string (selected resource)",
-      resource_type: "string (config|resource|connect)",
-      validation_notes: "string[] (warnings/requirements)"
-   },
-   options: {
-      trigger_type: ["IMMEDIATE", "COUNTDOWN", "SCHEDULED", "RECURRING"],
-      resource_type: ["config", "resource", "connect"],
-      models: ["ResourceTag", "ResourceRelationship"]
+      output_schema: {
+         selected_template: "string (matched template name)",
+         confidence_score: "number (0-1)",
+         trigger_type: "string (IMMEDIATE|COUNTDOWN|SCHEDULED|RECURRING)",
+         trigger_config: "object (trigger-specific parameters)",
+         refined_prompt: "string (optimized input)",
+         resource_name: "string (selected resource)",
+         resource_type: "string (config|resource|connect)",
+         validation_notes: "string[] (warnings/requirements)"
+      },
+      options: {
+         trigger_type: ["IMMEDIATE", "COUNTDOWN", "SCHEDULED", "RECURRING"],
+         resource_type: ["config", "resource", "connect"],
+         models: ["ResourceTag", "ResourceRelationship"]
 
-   },
-   parameters: {
-      temperature: 0.1,
-      num_ctx: 4096,
-      top_k: 40
-   },
-   anti_hallucination_rules: [
-      "Never suggest unapproved templates",
-      "Require explicit confirmation for low-confidence matches",
-      "Preserve all original intent during prompt compression"
-   ]
-}
+      },
+      parameters: {
+         temperature: 0.3,
+         num_ctx: 4096,
+         // top_k: 40
+      },
+      anti_hallucination_rules: [
+         "Never suggest unapproved templates",
+         "Require explicit confirmation for low-confidence matches",
+         "Preserve all original intent during prompt compression"
+      ],
+      messages: [
+         // Immediate Resource Action (High Confidence)
+
+         // Recurring Config Action
+         {
+            role: "user",
+            content: "Run inventory sync every Friday at 8 PM"
+         },
+         {
+            role: "assistant",
+            content: `{
+      "selected_template": "inventory_sync",
+      "confidence": 5,
+      "trigger_type": "RECURRING",
+      "trigger_config": {
+        "recurrence_rule": "0 0 20 * * 5"
+      },
+      "refined_prompt": "Run inventory sync Fridays 8 PM",
+      "resource_name": "inventory",
+      "resource_type": "config",
+      "validation_notes": []
+    }`
+         },
+         {
+            role: "user",
+            content: "Speak action a message Mayda dida? Maupay na kulop. every 30 seconds"
+         },
+         {
+            role: "assistant",
+            content: `{
+      "selected_template": "speak",
+      "confidence": 5,
+      "trigger_type": "RECURRING",
+      "trigger_config": {
+        "recurrence_rule": "*/30 * * * * *"
+      },
+      "refined_prompt": "Run inventory sync Fridays 8 PM",
+      "resource_name": "inventory",
+      "resource_type": "config",
+      "validation_notes": []
+    }`
+         },
+         // Resource Action with Pronouns
+         {
+            role: "user",
+            content: "Please could you update it with the new contact details?"
+         },
+         {
+            role: "assistant",
+            content: `{
+      "selected_template": "update_contact",
+      "confidence": 3,
+      "trigger_type": "IMMEDIATE",
+      "refined_prompt": "Update contact with new details",
+      "resource_name": "contact",
+      "resource_type": "resource",
+      "validation_notes": [
+        "Verify target contact ID from context",
+        "Confirm which details need updating"
+      ]
+    }`
+         },
+         // Resource Action with Pronouns
+         {
+            role: "user",
+            content: "Please could you update it with the new contact details?"
+         },
+         {
+            role: "assistant",
+            content: `{
+      "selected_template": "update_contact",
+      "confidence": 3,
+      "trigger_type": "IMMEDIATE",
+      "refined_prompt": "Update contact with new details",
+      "resource_name": "contact",
+      "resource_type": "resource",
+      "validation_notes": [
+        "Verify target contact ID from context",
+        "Confirm which details need updating"
+      ]
+    }`
+         },
+
+      ]
+   }
+
 ];

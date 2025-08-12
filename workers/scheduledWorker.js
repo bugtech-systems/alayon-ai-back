@@ -13,7 +13,7 @@ class SchedulerWorker {
         await this.loadActiveTriggers();
 
         // Setup periodic check for missed triggers (every 5 minutes)
-        setInterval(() => this.checkMissedTriggers(), 5 * 60 * 1000);
+        setInterval(() => this.checkMissedTriggers(), 1 * 60 * 1000);
         console.log('INITIALIZING MISSED TRIGGERS')
 
     }
@@ -54,7 +54,7 @@ class SchedulerWorker {
         scheduleJob(jobName, nextExecution, async () => {
             try {
 
-                console.log(jobName, 'SCHEDULED JOB Worker')
+                console.log(jobName, 'SCHEDULED JOB Worker', trigger)
 
                 // await ActionService.executeAction(trigger.action_template_id, { message: `${jobName} Hello There.` });
                 await actionEngine.execute(trigger.action_template_id, trigger.parameters);
@@ -64,17 +64,18 @@ class SchedulerWorker {
                     const nextRun = scheduledJobs[jobName]?.nextInvocation();
                     await trigger.update({ next_execution: nextRun });
                 } else {
-                    await trigger.update({ next_execution: null });
+                    await trigger.update({ next_execution: null, is_active: false });
                 }
             } catch (error) {
-                console.error(`Trigger execution failed: ${error.message}`);
+                console.error(`Trigger execution failed: ${error?.message}`);
             }
         });
 
         // Update trigger with next execution time
 
-
-        trigger.update({ next_execution: scheduledJobs[jobName]?.nextInvocation() });
+        if (trigger.trigger_type === 'RECURRING') {
+            trigger.update({ next_execution: scheduledJobs[jobName]?.nextInvocation() });
+        }
     }
 
     static calculateNextExecution(trigger) {
@@ -92,7 +93,7 @@ class SchedulerWorker {
 
             case 'COUNTDOWN':
                 const execTime = new Date();
-                execTime.setSeconds(execTime.getSeconds() + config.seconds);
+                execTime.setSeconds(execTime.getSeconds() + config.delay_seconds);
                 return execTime;
 
             default:
@@ -119,7 +120,7 @@ class SchedulerWorker {
             this.scheduleTrigger(trigger);
             const jobName = `trigger_${trigger.id}`;
 
-            ActionService.executeAction(trigger.action_template_id, { message: `Hello There ${jobName}.` });
+            ActionService.executeAction(trigger.action_template_id, trigger.parameters);
         });
     }
 }

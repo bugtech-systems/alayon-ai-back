@@ -44,7 +44,7 @@ export class ActionService {
 
         if (!nextExecution) return;
 
-
+        console.log('NEXT EXECUTION', nextExecution, trigger)
 
         // Create the scheduled job
         scheduleJob(jobName, nextExecution, async () => {
@@ -59,10 +59,11 @@ export class ActionService {
                     const nextRun = scheduledJobs[jobName]?.nextInvocation();
                     await trigger.update({ next_execution: nextRun });
                 } else {
-                    await trigger.update({ next_execution: null });
+                    await trigger.update({ next_execution: null, is_active: false });
                 }
+                return result
             } catch (error) {
-                console.error(`Trigger execution failed: ${error.message}`);
+                console.error(`Trigger execution failed: ${error?.message}`);
             }
         });
 
@@ -81,13 +82,13 @@ export class ActionService {
 
             case 'RECURRING':
                 return {
-                    rule: config.recurrence_rule,
+                    rule: config.recurrence_rule ? config.recurrence_rule : "* * * * *",
                     tz: config.timezone || 'UTC'
                 };
 
             case 'COUNTDOWN':
                 const execTime = new Date();
-                execTime.setSeconds(execTime.getSeconds() + config.seconds);
+                execTime.setSeconds(execTime.getSeconds() + config.delay_seconds);
                 return execTime;
 
             default:
