@@ -8,6 +8,9 @@ export class OllamaClient {
             baseURL: OLLAMA_BASE_URL,
             timeout: 120000 // Longer timeout for complex tasks
         });
+
+
+        console.log(OLLAMA_BASE_URL, 'OLLAMA BASE')
     }
 
     async chat(model, messages, options) {

@@ -4,7 +4,6 @@ import { ActionEngine } from '../services/ActionEngine.js';
 import { cleanAndParseJSON, generateFromSchema, isJsonParsable, generateExecutionId, generateFieldTypeMap } from '../helpers/helpers.js';
 import * as expressionEvaluator from './expressionEvaluator.js';
 import { resolveConfig, resolveParameters, resolvePlaceholders } from '../helpers/parameterResolver.js';
-import { Op } from 'sequelize';
 
 
 
