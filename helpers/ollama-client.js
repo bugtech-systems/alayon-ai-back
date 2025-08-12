@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const OLLAMA_BASE_URL = 'http://127.0.0.1:11434/api';
+const OLLAMA_BASE_URL = process.env.AI_HOST || 'http://127.0.0.1:11434/api';
 
 export class OllamaClient {
     constructor() {
