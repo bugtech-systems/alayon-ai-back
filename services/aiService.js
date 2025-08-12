@@ -1,5 +1,5 @@
 import ollama from 'ollama';
-import { calculateEmbedding } from './embeddingService.js';
+import { calculateEmbedding } from './EmbeddingService.js';
 import { calculateTokens } from './tokenService.js';
 import { db } from '../models/index.js'
 
