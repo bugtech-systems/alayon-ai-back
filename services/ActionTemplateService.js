@@ -78,11 +78,11 @@ export async function getActionTemplates() {
 
         let resources = await db.ActionTemplate.findAll({
             attributes: ['name', 'description', 'parameters', 'conditions', 'field_mappings', 'aggregations', 'tool_type', 'config'],
-            include: [{
-                model: db.ResourceTag,
-                as: 'target_resource_type',
-                required: false
-            }]
+            /*          include: [{
+                         model: db.ResourceTag,
+                         as: 'target_resource_type',
+                         required: false
+                     }] */
         }).catch(err => {
             console.log(err, 'RANGE ERR')
             return err
