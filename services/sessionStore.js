@@ -1,17 +1,19 @@
 import { where } from 'sequelize';
 import { db } from '../models/index.js';
+import { internationalizePhoneNumber, sanitizePhoneNumber } from '../helpers/helpers.js';
+import ResourceApiService from './ResourceApiService.js';
 
 
 const sessions = new Map();
 
-// Cleanup expired sessions every minute
+// Cleanup expired sessions every 5 minute
 setInterval(() => {
     const now = Date.now();
     console.log(`[Session Cleanup] Running cleanup at ${new Date().toISOString()}`);
     let cleanupCount = 0;
 
     for (const [sessionId, session] of sessions) {
-        if (now - session.lastAccessed > 3 * 60 * 1000) { // 30 minutes
+        if (now - session.lastAccessed > 30 * 60 * 1000) { // 30 minutes
             sessions.delete(sessionId);
             cleanupCount++;
             console.log(`[Session Cleanup] Removed expired session: ${sessionId}`);
@@ -19,7 +21,7 @@ setInterval(() => {
     }
 
     console.log(`[Session Cleanup] Removed ${cleanupCount} expired sessions`);
-}, 60 * 1000);
+}, 5 * 60 * 1000);
 
 export const sessionManager = {
     async createSession(id) {
@@ -38,13 +40,17 @@ export const sessionManager = {
             lastMessage: '',
             resourceName: null,
             resourceId: null,
+            tenant_id: null,
             ai_preset_id: null,
             createdAt: new Date(),
-            expiresAt: new Date(Date.now() + 2 * 60 * 1000), // 30 min session
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min session
             history: [],
             status: 'followup',
             conversation_id: conversation.id
         };
+
+
+
 
 
 
@@ -95,6 +101,89 @@ export const sessionManager = {
         // console.log(`[Session] Updated session state: ${JSON.stringify(session, null, 2)}`);
         return session;
     },
+    async handleMobileSubscription(mobile, org) {
+        let userConfig = await ResourceApiService.getResourceTypeConfig('users', org)
+        // console.log(`[Session] Updating session ${sessionId} with: ${JSON.stringify(updates)}`);
+        let user = await db.ResourceTag.findOne({
+            where: {
+                resource_type: 'resource',
+                resource_name: 'users',
+                tenant_id: org,
+                'attributes.phoneNumber': sanitizePhoneNumber(mobile),
+                is_deleted: false
+            }
+        });
+        console.log(user, 'STATE USER', mobile, sanitizePhoneNumber(mobile))
+        if (!user) {
+            user = await db.ResourceTag.create({
+                resource_type: 'resource', resource_name: 'users',
+                'attributes.phoneNumber': sanitizePhoneNumber(mobile),
+                'attributes.isSubscribe': false,
+                tenant_id: org,
+                resource_parent_id: userConfig.id
+            })
+
+            console.log(`[Mobile] Subscription failed - session not found: ${mobile}`);
+            // return user;
+        }
+
+
+        console.log(`[Session] Found  session state: ${JSON.stringify(user, null, 2)}`);
+        return user;
+    },
+
+
+    async handleUpdateMobile(id, data, subscribe) {
+
+        try {
+            // Find the user
+            const user = await db.ResourceTag.findByPk(id);
+
+            if (!user) {
+                console.log(`[Mobile] Subscription failed - user not found: ${id}`);
+                return false;
+            }
+
+            // Prepare updates object
+            const updates = {
+                attributes: user.attributes,
+                'attributes.isSubscribe': subscribe,
+                'attributes.phoneNumber': sanitizePhoneNumber(user.attributes.phoneNumber),
+            };
+
+            // Conditionally add other fields if they exist in data
+            const fieldsToUpdate = [
+                'firstName',
+                'lastName',
+                'address_city',
+                'address_barangay',
+                'address_street'
+            ];
+
+            fieldsToUpdate.forEach(field => {
+                if (data[field]) {
+                    updates[`attributes.${field}`] = data[field];
+                }
+            });
+
+            // Perform the update
+            const [affectedCount] = await db.ResourceTag.update(updates, {
+                where: { id: user.id }
+            });
+
+            if (affectedCount === 0) {
+                console.log(`[Mobile] No records were updated for user: ${user.attributes.phoneNumber}`);
+                return false;
+            }
+
+            console.log(`[Mobile] Successfully updated user: ${user.attributes.phoneNumber}`);
+            return true;
+        } catch (error) {
+            console.error(`[Mobile] Error updating user ${user.attributes.phoneNumber}:`, error);
+            return false;
+        }
+    },
+
 
     addHistory(sessionId, entry) {
         // console.log(`[Session] Adding history to ${sessionId}: ${JSON.stringify(entry)}`);

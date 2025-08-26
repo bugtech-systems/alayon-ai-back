@@ -1,4 +1,5 @@
 
+import { sanitizePhoneNumber } from '../helpers/helpers.js';
 import { db } from '../models/index.js';
 
 // import { ResourceTag } from '../models/resourceTag.model.js'; // Your Sequelize model
@@ -153,6 +154,28 @@ export const getOrganizations = async () => {
     });
 };
 
+export const getOrganizationsByNumber = async (num) => {
+    const org = await ResourceTag.findOne({
+        where: {
+            resource_name: { [Op.iLike]: 'organizations' },
+            resource_type: 'resource',
+            is_deleted: false,
+            "attributes.phoneNumber": sanitizePhoneNumber(num)
+        },
+        raw: true
+    });
+
+    console.log(org, 'ORG', num)
+    return org;
+};
+
+export const getOrganizationById = async (id) => {
+    const org = await ResourceTag.findByPk(id);
+
+    console.log(org, 'ORG', id)
+    return org;
+};
+
 export const getResourcesByType = async (resourceType = 'config', options) => {
     const resources = await ResourceTag.findAll({
         where: {
@@ -223,7 +246,7 @@ export const findResourceByName = async (name) => {
     return resource ? resource.get({ plain: true }) : null
 };
 
-export const findActionTemplateByName = async (name) => {
+export const findActionTemplateByName = async (name, tenantId) => {
     let options = {};
 
     if (!name) {
@@ -232,11 +255,10 @@ export const findActionTemplateByName = async (name) => {
 
     if (Number.isInteger(name) || /^\d+$/.test(name)) {
         // If identifier is a number, use it directly as parent ID
-        options = { id: name }
+        options = { id: name, ...(tenantId ? { tenant_id: tenantId } : {}) }
     } else {
-        options = { name }
+        options = { name, ...(tenantId ? { tenant_id: tenantId } : {}) }
     }
-
 
 
     let resource = await db.ActionTemplate.findOne({

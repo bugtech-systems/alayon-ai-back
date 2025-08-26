@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const OLLAMA_BASE_URL = process.env.AI_HOST || 'http://127.0.0.1:11434/api';
+console.log(OLLAMA_BASE_URL, 'OLLAMA BASE')
 
 export class OllamaClient {
     constructor() {
@@ -8,7 +9,6 @@ export class OllamaClient {
             baseURL: OLLAMA_BASE_URL,
             timeout: 120000 // Longer timeout for complex tasks
         });
-
 
         console.log(OLLAMA_BASE_URL, 'OLLAMA BASE')
     }
@@ -28,8 +28,13 @@ export class OllamaClient {
                 stream: false
             });
 
+
+
+
             return response.data;
         } catch (error) {
+
+            console.log(error, 'ERROR')
             throw new Error(`Ollama API error: ${error.response?.data?.error || error.message}`);
         }
     }

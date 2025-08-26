@@ -5,6 +5,11 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        position: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0
+        },
         resource_tag_id: {
             type: DataTypes.INTEGER,
             allowNull: false
@@ -38,6 +43,26 @@ export default ({ sequelize }, DataTypes) => {
             defaultValue: false
         },
         is_deleted: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        is_column: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        has_filter: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        is_hidden: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        is_searchable: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        is_sortable: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
         },

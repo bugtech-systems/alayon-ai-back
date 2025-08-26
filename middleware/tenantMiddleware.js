@@ -13,19 +13,20 @@ export const validateTenantId = (req, res, next) => {
     // }
 
     // Validate as integer
-    let parsedId = Number(tenantId);
     // if (!Number.isInteger(parsedId) || parsedId <= 0) {
     //     return res.status(400).json({
     //         error: 'tenant_id must be a positive integer'
     //     });
     // }
-
-    if (!tenantId) {
-        parsedId = null;
+    let parsedId = null;
+    if (tenantId && tenantId != 'undefined') {
+        parsedId = Number(tenantId);
     }
+
 
 
     // Attach validated tenant_id to the request
     req.tenantId = parsedId;
+    console.log(req.tenantId, 'REQ TENANT', tenantId)
     next();
 };  

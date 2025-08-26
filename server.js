@@ -15,12 +15,10 @@ import auditLogRouter from './routes/auditRoutes.js';
 import aiPresetRouter from './routes/aiPreset.js';
 
 
-
 import morgan from 'morgan';
 import { swaggerSpec } from './configs/swagger.js';
 import swaggerUi from 'swagger-ui-express'
 import { initializeDatabase, db } from './models/index.js';
-
 import multer from 'multer';
 import path from 'path';
 import { exec } from 'child_process';
@@ -62,12 +60,13 @@ const app = express();
 
 
 const port = process.env.PORT || 3300;
+const staticUrl = process.env.API_STATIC_URL || 'http://localhost:3300/api/v1/static';
 
 // Enhanced CORS configuration
 const corsOptions = {
     origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'tenant_id'],
     credentials: true
 };
 
@@ -87,7 +86,24 @@ app.use('/api/v1/static', express.static(path.join(__dirname, 'uploads')))
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 
-const upload = multer({ dest: path.join(__dirname, 'uploads') });
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+    },
+});
+
+
+const upload = multer({ storage });
 
 
 
@@ -187,14 +203,10 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
     try {
         // Convert MP3 → WAV (mono, 16kHz)
 
-
-        res.json({ text: `Hello Hey` });
+        res.json({ name: req.file.originalname, url: staticUrl + '/' + req.file.filename });
     } catch (error) {
         console.log('Error:', error);
         res.status(500).json({ error: 'Failed to transcribe' });
-    } finally {
-        await fs.unlink(mp3Path).catch(() => { });
-        await fs.unlink(wavPath).catch(() => { });
     }
 });
 
@@ -354,8 +366,8 @@ const matchesFilter = (candidate, contestObj, location, filter = {}) => {
             else if ('in' in filterValue && Array.isArray(filterValue.in)) {
                 if (filterValue.in.length > 0 && !filterValue.in.includes(value)) return false;
             }
-            else if ('neq' in filterValue) {
-                if (value === filterValue.neq) return false;
+            else if ('neq' in filterValue && Array.isArray(filterValue.neq)) {
+                if (filterValue.neq.length > 0 && filterValue.neq.includes(value)) return false;
             }
             continue;
         }
@@ -376,7 +388,9 @@ const matchesFilter = (candidate, contestObj, location, filter = {}) => {
 
 // Endpoint with filtering, grouping, and summing
 app.post('/api/v1/group-values', (req, res) => {
+
     const { fieldToGroup, filter = {}, sumField, selectFields = [], excludeFields = [] } = req.body;
+
 
     if (!fieldToGroup) {
         return res.status(400).json({ error: 'fieldToGroup is required' });
@@ -421,15 +435,7 @@ app.post('/api/v1/group-values', (req, res) => {
             });
         });
 
-        res.json({
-            groupedBy: fieldToGroup,
-            filterUsed: filter,
-            sumField: sumField || null,
-            selectFields,
-            excludeFields,
-            resultCount: Object.keys(groupedResults).length,
-            results: groupedResults
-        });
+        res.json(groupedResults);
 
     } catch (error) {
         res.status(500).json({ error: error.message });

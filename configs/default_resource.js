@@ -4,21 +4,41 @@ export const config = [
         "fields": [
             {
                 "field_name": "username",
+                "label": "Username",
                 "data_type": "string",
                 "is_required": true,
-                "is_unique": true
+                "is_unique": true,
+                "position": 4
             },
             {
-                "field_name": "age",
-                "data_type": "number"
+                "field_name": "firstName",
+                "label": "First Name",
+                "data_type": "string",
+                "position": 3
             },
             {
-                "field_name": "profile",
-                "data_type": "json"
+                "field_name": "lastName",
+                "label": "Last Name",
+                "data_type": "string",
+                "position": 2
+            },
+            {
+                "field_name": "email",
+                "label": "Email Address",
+                "data_type": "string",
+                "position": 1
+            },
+            {
+                "field_name": "phoneNumber",
+                "label": "Phone Number",
+                "data_type": "string",
+                "position": 1
             },
             {
                 "field_name": "status",
-                "data_type": "string"
+                "label": "Status",
+                "data_type": "string",
+                "position": 0
             }
         ]
     },
@@ -28,7 +48,9 @@ export const config = [
             {
                 "field_name": "name",
                 "data_type": "string",
-                "is_required": true
+                "is_required": true,
+                "is_unique": true,
+                "position": 1
             },
             {
                 "field_name": "address",
@@ -48,7 +70,10 @@ export const config = [
             {
                 "field_name": "title",
                 "data_type": "string",
-                "is_required": true
+                "is_required": true,
+                "is_unique": true,
+                "position": 1
+
             },
             {
                 "field_name": "url",

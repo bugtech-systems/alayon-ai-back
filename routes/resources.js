@@ -23,6 +23,7 @@ const formatResourceResponse = (resource, connection) => {
 
                 formattedRelationships[relatedResource.resource_name].push({
                     id: relatedResource.id,
+                    position: relatedResource.position,
                     resource_type: 'resource',
                     resource_name: relatedResource.resource_name,
                     attributes: { ...relatedResource.attributes },
@@ -53,6 +54,7 @@ const formatResourceResponse = (resource, connection) => {
                 formattedRelationships[relatedResource.resource_name].push({
                     id: relatedResource.id,
                     resource_type: 'resource',
+                    position: relatedResource.position,
                     resource_name: relatedResource.resource_name,
                     attributes: { ...relatedResource.attributes },
                     is_deleted: relatedResource.is_deleted,
@@ -74,6 +76,7 @@ const formatResourceResponse = (resource, connection) => {
         resource_type: 'resource',
         resource_name: resource.resource_name,
         tenant_id: resource.tenant_id,
+        position: resource.position,
         attributes: {
             ...resource.attributes,
         },
@@ -104,7 +107,7 @@ router.post('/', async (req, res) => {
     const { relationship } = req.query;
     const transaction = await db.sequelize.transaction();
     try {
-        const { resource_name, attributes, relationships } = req.body;
+        const { resource_name, attributes, relationships, resource_parent_id } = req.body;
 
         if (!resource_name) {
             await transaction.rollback();
@@ -131,7 +134,8 @@ router.post('/', async (req, res) => {
                 resource_name: String(resource_name).toLowerCase(),
                 attributes,
                 relationships,
-                tenant_id: req.tenantId
+                tenant_id: req.tenantId,
+                resource_parent_id
             },
             transaction
         );
@@ -178,7 +182,6 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res, next) => {
     try {
         const { relationship } = req.query;
-
         const resource = await resourceService.getResourceById(req.params.id, req.tenantId);
         if (!resource) {
             return res.status(404).json({
@@ -196,6 +199,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.get('/type/:typeId', async (req, res, next) => {
     try {
+
         const resources = await resourceService.getResourcesByType(req.params.typeId, req.tenantId);
         const formattedResources = resources.map(resource => formatResourceResponse(resource.dataValues));
 
@@ -248,19 +252,36 @@ router.get('/:id/:relationship', async (req, res, next) => {
 router.put('/:id', async (req, res) => {
     const transaction = await db.sequelize.transaction();
     try {
-        const { name, attributes } = req.body;
-        const resource = await resourceService.updateResource(
+        const { name, attributes, position } = req.body;
+
+        const resource = await resourceService.getResourceById(req.params.id, req.tenantId);
+
+
+        if (!resource) {
+            return res.status(404).json({
+                error: {
+                    status: 404,
+                    message: 'Resource not Found!'
+                }
+            });
+        }
+
+
+
+
+        const updateResource = await resourceService.updateResource(
             req.params.id,
             {
-                name,
-                attributes,
+                resource_name: resource.resource_name,
+                attributes: { ...resource.attributes, ...attributes },
+                position,
                 tenant_id: req.tenantId
             },
             transaction
         );
 
         await transaction.commit();
-        return res.status(200).json(formatResourceResponse(resource));
+        return res.status(200).json(formatResourceResponse(updateResource));
     } catch (error) {
         await transaction.rollback();
 

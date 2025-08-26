@@ -301,8 +301,8 @@ export function cleanAndParseJSON(input) {
         // Trim whitespace
         cleaned = cleaned.trim();
 
-        console.log("Raw input:\n", input);
-        console.log("Cleaned input:\n", cleaned);
+        // console.log("Raw input:\n", input);
+        // console.log("Cleaned input:\n", cleaned);
 
         return JSON.parse(cleaned);
     } catch (err) {
@@ -585,4 +585,73 @@ function getNestedValue(obj, pathParts) {
         if (acc === undefined || acc === null) return undefined;
         return acc[part];
     }, obj);
+
+}
+
+function formatToTenDigits(str) {
+    if (!str || typeof str !== 'string') return '9000000000'; // default fallback
+
+    if (str[0] !== '9') str = '9' + str;
+    while (str.length < 10) {
+        str += '0';
+    }
+    return str.slice(0, 10); // In case it's longer than 10
+}
+
+
+export function sanitizePhoneNumber(phoneNumber) {
+    // Remove any non-numeric characters from the phone number
+    const sanitized = String(phoneNumber).replace(/\D/g, '');
+
+    if (sanitized.length > 12) throw Error('Invalid phone number format');
+
+
+    // Check for common prefixes and remove them
+    if (sanitized.startsWith('09')) {
+        return sanitized.slice(1); // Remove the '09' prefix
+    } else if (sanitized.startsWith('639')) {
+        return sanitized.slice(2); // Remove the '639' prefix
+    } else if (sanitized.startsWith('+639')) {
+        return sanitized.slice(3); // Remove the '+639' prefix
+    } else if (sanitized.length === 10) {
+        return sanitized; // Already a 10-digit number
+    } else {
+        return formatToTenDigits(sanitized)
+    }
+
+    // If the number is not in a valid format, return null or throw an error
+}
+
+
+export function internationalizePhoneNumber(phoneNumber) {
+    // Remove any non-numeric characters from the phone number
+    const sanitized = phoneNumber.replace(/\D/g, '');
+
+    if (sanitized.length > 12) throw Error('Invalid phone number format');
+
+
+    // Check for common prefixes and remove them
+    if (sanitized.startsWith('09')) {
+        return '+63' + sanitized.slice(1); // Remove the '09' prefix
+    } else if (sanitized.startsWith('639')) {
+        return '+' + sanitized; // Remove the '639' prefix
+    } else if (sanitized.startsWith('+639')) {
+        return sanitized; // Remove the '+639' prefix
+    } else if (sanitized.length === 10 && sanitized.startsWith('9')) {
+        return '+63' + sanitized; // Already a 10-digit number
+    }
+
+    // If the number is not in a valid format, return null or throw an error
+    throw new Error('Invalid phone number format');
+}
+
+export function parseToString(data) {
+    // Remove any non-numeric characters from the phone number
+
+    if (typeof data != 'string') {
+        return JSON.stringify(data, null, 2)
+    } else {
+        return data
+    }
+
 }

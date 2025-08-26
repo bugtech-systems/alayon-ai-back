@@ -9,6 +9,7 @@ import { confirmOperation } from '../helpers/ollamaHelpers.js';
 import { ActionEngine } from '../services/ActionEngine.js';
 import { ActionService } from '../services/ActionTriggerService.js';
 import { AIAgent } from '../services/aiAgent.js';
+import { Op } from 'sequelize';
 
 const actionEngine = new ActionEngine();
 
@@ -83,14 +84,6 @@ router.post('/alayon', async (req, res) => {
             });
 
 
-            console.log({
-                ...req.body,
-                trigger_config: action.trigger_config,
-                trigger_type: action.trigger_type,
-                action_template_id: action.template.id,
-                tool_type: action.template.tool_type,
-                parameters: actionTemplate.parameters
-            }, 'trrgg')
 
             result = await ActionService.scheduleTrigger(trigger);
             return res.status(200).json({
@@ -101,7 +94,7 @@ router.post('/alayon', async (req, res) => {
             // this.executeImmediately(trigger);
             console.log(action, actionTemplate, 'trrrr immed')
             result = await actionEngine.execute(
-                action.template.id,
+                action.template,
                 actionTemplate.parameters
             );
 
@@ -315,17 +308,19 @@ router.get('/train/:id', async (req, res) => {
             return res.status(400).json({ error: "Missing message id." });
         }
 
-        const message = await db.Message.findByPk(messageId);
+        const message = await db.Message.findAll({ where: { treadId: messageId } });
 
-        if (!message) {
+        if (message.length < 2) {
             return res.status(404).json({
-                error: `Message with id ${messageId} not found.`
+                error: `Tread with id ${messageId} not found.`
             });
         }
 
 
-        const trained = await db.Message.update({ is_training_candidate: !message.is_training_candidate }, {
-            where: { id: messageId }
+
+
+        const trained = await db.Message.update({ is_training_candidate: !message[0].is_training_candidate }, {
+            where: { treadId: messageId }
         });
 
 
@@ -354,6 +349,8 @@ router.get('/train/:id', async (req, res) => {
 router.get('/preset/:id', async (req, res) => {
     const modelId = req.params.id;
     const conversation_id = req.query.conversation_id
+    const is_liked = req.query.liked;
+
     let session = await sessionManager.getSession(conversation_id);
 
 
@@ -383,9 +380,11 @@ router.get('/preset/:id', async (req, res) => {
             limit: parseInt(limit),
             order: [['created_at', sort]],
             offset: parseInt(offset),
-            where: { ai_preset_id: req.params.id }
+            where: { ai_preset_id: req.params.id, role: { [Op.or]: ["user", "assistant"] }, ...(is_liked == 'true' ? { is_training_candidate: is_liked } : {}) }
         });
 
+
+        console.log(Boolean(is_liked), 'liiked', is_liked == 'true', { ...(is_liked == 'true' ? { is_training_candidate: is_liked } : {}) })
         res.status(200).json({
             data: result.rows,
             meta: {
@@ -475,10 +474,26 @@ router.put('/message/:id', async (req, res) => {
 
     try {
 
-        const [affectedRows] = await db.Message.update({ content }, {
-            where: { id: req.params.id },
-            individualHooks: true,
-        });
+
+        let contentToSave = content;
+
+        // Only attempt to parse if content is a string
+        if (typeof content === 'string') {
+            try {
+                contentToSave = JSON.parse(content);
+            } catch (e) {
+                // Parsing failed, keep original content
+            }
+        }
+
+        const [affectedRows] = await db.Message.update(
+            { content: contentToSave },
+            {
+                where: { id: req.params.id },
+                individualHooks: true,
+            }
+        );
+
 
         if (affectedRows === 0) {
             return res.status(404).json({ error: 'Message not found' });

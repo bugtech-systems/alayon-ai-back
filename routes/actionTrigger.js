@@ -5,7 +5,8 @@ import {
     createTrigger,
     executeNow,
     getAuditLogs,
-    cancelTrigger
+    cancelTrigger,
+    cancelAllTrigger
 } from '../controllers/actionController.js';
 
 const router = express.Router();
@@ -17,7 +18,10 @@ router.get('/', getTemplates);
 
 // Trigger Management
 router.post('/:templateId/triggers', createTrigger);
+router.delete('/triggers/all', cancelAllTrigger);
 router.delete('/triggers/:triggerId', cancelTrigger);
+
+
 
 // Execution
 router.post('/:templateId/execute', executeNow);

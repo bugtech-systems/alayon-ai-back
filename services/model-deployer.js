@@ -5,17 +5,17 @@ import { db } from '../models/index.js';
 import { Op } from 'sequelize';
 import * as expressionEvaluator from './expressionEvaluator.js';
 import { resolveConfig, resolveParameters, resolvePlaceholders } from '../helpers/parameterResolver.js';
-import { generateFromSchema, generateExecutionId } from '../helpers/helpers.js';
+import { generateFromSchema, generateExecutionId, parseToString } from '../helpers/helpers.js';
 import { DEFAULT_MODELS } from '../configs/default_models.js';
-import { ActionEngine } from '../services/ActionEngine.js';
+import { ActionEngine } from './ActionEngine.js';
 
-
-
-const actionEngine = new ActionEngine();
 
 
 export class ModelDeployer {
     static async generateBaseModelfile(model, trainingFile) {
+        const actionEngine = new ActionEngine();
+
+
         const parameters = [
             model.parameters?.temperature !== undefined && `PARAMETER temperature ${model.parameters.temperature}`,
             model.parameters?.num_ctx !== undefined && `PARAMETER num_ctx ${model.parameters.num_ctx}`,
@@ -47,7 +47,12 @@ export class ModelDeployer {
 
 
 
-        const newSystemInstruction = resolvePlaceholders(model.system_instruction, baseContext)
+
+
+        const newSystemInstruction = expressionEvaluator.evaluatePlaceholders(
+            model.system_instruction,
+            baseContext
+        );
 
         console.log(newModel?.output_schema.properties, baseContext, newSystemInstruction, 'NEW MODEL')
 
@@ -75,30 +80,55 @@ RULES:
 3. Unknown/missing values MUST be null
 4. Never add extra fields
 5. Numbers must be within defined bounds
-
-EXAMPLE VALID RESPONSE:
-${JSON.stringify(generateFromSchema(newModel?.output_schema), null, 2)}
 """
 
 # Training parameters
 ${parameters}
 
-
 # Training data
 ${trainingFile}
-
         `.trim();
+    }
+
+    static async generateSystemInstruction(model, message) {
+        const actionEngine = new ActionEngine();
+
+
+        let executionId = generateExecutionId();
+
+        const baseContext = {
+            params: {},
+            outputs: {},
+            executionId: executionId
+        };
+
+        if (model.pre_hooks) {
+            await actionEngine.processHooks(model.pre_hooks, baseContext);
+        }
+
+
+
+        const newSystemInstruction = expressionEvaluator.evaluatePlaceholders(
+            message,
+            baseContext
+        );
+
+        return newSystemInstruction.trim();
     }
 
     static async createTrainingMessages(trainingData) {
         const messages = [];
 
         for (const example of trainingData) {
+            if (example.context) {
+                messages.push(`MESSAGE assistant """${parseToString(example.context)}"""`);
+            }
+
             // Format user message
-            messages.push(`MESSAGE user """${example.user}"""`);
+            messages.push(`MESSAGE user """${parseToString(example.user)}"""`);
 
             // Format assistant message
-            messages.push(`MESSAGE assistant """${example.assistant}"""`);
+            messages.push(`MESSAGE assistant """${parseToString(example.assistant)}"""`);
 
             // Add empty line between conversation pairs
             messages.push('');
@@ -139,9 +169,11 @@ ${trainingFile}
             for (let i = 0; i < messages.length; i++) {
                 if (messages[i].role === 'user' &&
                     messages[i + 1]?.role === 'assistant') {
+                    let context = (messages[i - 1]?.role == 'assistant' && messages[i - 1].name) ? messages[i - 1].content : null;
                     trainingData.push({
                         user: messages[i].content,
                         assistant: messages[i + 1].content,
+                        ...(context ? { context } : {}),
                         confidence: messages[i + 1].confidence_score
                     });
                     i++; // Skip assistant message

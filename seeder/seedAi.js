@@ -88,7 +88,7 @@ async function seedAiPreset() {
             const transaction = await db.sequelize.transaction();
 
             try {
-                let { name, parameters, options, ...moreData } = aiConfig;
+                let { name, parameters, options, model_name, ...moreData } = aiConfig;
 
                 console.log(name, 'MOD')
 
@@ -129,8 +129,8 @@ async function seedAiPreset() {
                 // Check if resource already exists (case-insensitive)
                 const existingResource = await db.AiPreset.findOne({
                     where: Sequelize.where(
-                        Sequelize.fn('lower', Sequelize.col('name')),
-                        Sequelize.fn('lower', name)
+                        Sequelize.fn('lower', Sequelize.col('model_name')),
+                        Sequelize.fn('lower', model_name)
                     ),
                     transaction
                 });

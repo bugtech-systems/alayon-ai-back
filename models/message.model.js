@@ -5,13 +5,21 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        treadId: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
         role: {
-            type: DataTypes.ENUM('system', 'user', 'assistant'),
+            type: DataTypes.ENUM('system', 'user', 'assistant', 'context'),
             allowNull: false
         },
+        name: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
         content: {
-            type: DataTypes.TEXT,
-            allowNull: false
+            type: DataTypes.JSONB,
+            allowNull: true
         },
         tokens: {
             type: DataTypes.INTEGER,

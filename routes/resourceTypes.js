@@ -37,7 +37,6 @@ router.post('/', async (req, res) => {
         const { resource_name, fields } = req.body;
 
 
-        console.log(fields, resource_name, 'rssss')
         if (!resource_name || !fields) {
             await transaction.rollback();
             return res.status(400).json({ error: 'resource_name is required' });
@@ -52,7 +51,7 @@ router.post('/', async (req, res) => {
                         Sequelize.fn('lower', Sequelize.col('resource_name')),
                         Sequelize.fn('lower', resource_name)
                     ),
-                    { resource_type: 'config', is_deleted: false },
+                    { resource_type: 'config', is_deleted: false, tenant_id: req.tenantId },
                 ]
             },
             transaction
@@ -77,7 +76,8 @@ router.post('/', async (req, res) => {
 
         const resourceType = await db.ResourceTag.create({
             resource_type: 'config',
-            resource_name: String(resource_name).toLowerCase()
+            resource_name: String(resource_name).toLowerCase(),
+            tenant_id: req.tenantId
         }, { transaction });
 
         if (fields && fields.length > 0) {
@@ -85,7 +85,8 @@ router.post('/', async (req, res) => {
                 fields.map(field =>
                     db.ResourceField.create({
                         ...field,
-                        resource_tag_id: resourceType.id
+                        resource_tag_id: resourceType.id,
+                        resource_parent_id: req.tenantId
                     }, { transaction })
                 )
             );
@@ -121,20 +122,33 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res, next) => {
     try {
         const resourceTypes = await db.ResourceTag.findAll({
-            where: { resource_type: 'config', is_deleted: false },
+            where: {
+                resource_type: 'config', is_deleted: false,
+                ...(req.tenantId ? { tenant_id: req.tenantId } : {}),
+            },
             include: [
                 {
                     model: db.ResourceField,
                     as: 'fields',
                     where: { is_deleted: false },
-                    required: false
+                    required: false,
+                    order: [
+                        ['position', 'DESC'] // ASC for ascending order (lower numbers first)
+                    ]
                 }
             ],
             order: [
-                ['created_at', 'DESC'],
-                [{ model: db.ResourceField, as: 'fields' }, 'created_at', 'ASC']
+                ['created_at', 'DESC']
             ]
         });
+
+
+        resourceTypes.forEach(resource => {
+            if (resource.fields) {
+                resource.fields.sort((a, b) => b.position - a.position);
+            }
+        });
+
         res.json(resourceTypes);
     } catch (error) {
         next(error);
@@ -188,13 +202,17 @@ router.get('/:identifier', async (req, res, next) => {
             where: {
                 ...options,
                 is_deleted: false,
+                ...(req.tenantId ? { tenant_id: req.tenantId } : {}),
                 resource_type: 'config' // Ensure it's a config type as per your original check
             },
             include: [
                 {
                     model: db.ResourceField,
                     as: 'fields',
-                    required: false
+                    required: false,
+                    order: [
+                        ['position', 'DESC'] // ASC for ascending order (lower numbers first)
+                    ]
                 }
             ]
         });
@@ -203,6 +221,11 @@ router.get('/:identifier', async (req, res, next) => {
         if (!resourceType) return res.status(404).json({ message: 'Resource Not Found!' })
 
         let resData = resourceType.get({ plain: true })
+
+        if (resData) {
+            resData.fields.sort((a, b) => b.position - a.position);
+        }
+
         return res.json(resData);
     } catch (error) {
         console.error(`Error fetching resource: ${error.message}`);

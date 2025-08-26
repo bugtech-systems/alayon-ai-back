@@ -27,5 +27,5 @@ session_logs/*
 
 venv
 tuner
-
+uploads
 uploads*!SECTION

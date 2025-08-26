@@ -3,6 +3,7 @@ import { ActionService } from '../services/ActionTriggerService.js';
 import { db } from '../models/index.js';
 import { Op } from 'sequelize';
 import { ActionEngine } from '../services/ActionEngine.js';
+import { findActionTemplateByName } from '../services/ResourceService.js';
 
 const actionEngine = new ActionEngine();
 
@@ -55,9 +56,10 @@ class SchedulerWorker {
             try {
 
                 console.log(jobName, 'SCHEDULED JOB Worker', trigger)
+                const template = await findActionTemplateByName(trigger.action_template_id);
 
                 // await ActionService.executeAction(trigger.action_template_id, { message: `${jobName} Hello There.` });
-                await actionEngine.execute(trigger.action_template_id, trigger.parameters);
+                await actionEngine.execute(template, trigger.parameters);
 
                 // Update next execution for recurring triggers
                 if (trigger.trigger_type === 'RECURRING') {
@@ -75,6 +77,8 @@ class SchedulerWorker {
 
         if (trigger.trigger_type === 'RECURRING') {
             trigger.update({ next_execution: scheduledJobs[jobName]?.nextInvocation() });
+        } else {
+            trigger.update({ next_execution: null, is_active: false });
         }
     }
 
@@ -115,13 +119,21 @@ class SchedulerWorker {
 
 
 
-        missedTriggers.forEach(trigger => {
+        for (let trigger of missedTriggers) {
+
             console.log(`Executing missed trigger: ${trigger.id}`);
             this.scheduleTrigger(trigger);
             const jobName = `trigger_${trigger.id}`;
 
-            ActionService.executeAction(trigger.action_template_id, trigger.parameters);
-        });
+            let triggerAction = await findActionTemplateByName(trigger.action_template_id);
+
+            actionEngine.execute(triggerAction, trigger.parameters, trigger.id);
+            // ActionService.executeAction(trigger.action_template_id, trigger.parameters);
+        }
+
+        /*      missedTriggers.forEach(trigger => {
+     
+             }); */
     }
 }
 

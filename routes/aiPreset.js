@@ -33,7 +33,13 @@ const withTransaction = async (operation, res) => {
 // Create - POST /presets
 router.post('/', async (req, res) => {
     await withTransaction(async (t) => {
-        const preset = await db.AiPreset.create(req.body, { transaction: t });
+
+        let body = {
+            ...req.body,
+            model_name: `${req.body.model_name}_${req.tenantId}`,
+            ...(req.tenantId ? { tenant_id: req.tenantId } : {})
+        }
+        const preset = await db.AiPreset.create(body, { transaction: t });
         await ModelDeployer.deployModel(preset.id, t);
         res.status(201).json(preset);
     }, res);
@@ -44,11 +50,16 @@ router.get('/', async (req, res) => {
     try {
         const { page = 1, limit = 10 } = req.query;
         const offset = (page - 1) * limit;
+        let options = { ...(req.tenantId ? { tenant_id: req.tenantId } : {}) }
 
+        if (req.query.filters) {
+            options = { ...options, ...JSON.parse(req.query.filters) }
+
+        }
         const result = await db.AiPreset.findAndCountAll({
             limit: parseInt(limit),
             offset: parseInt(offset),
-            where: req.query.filters ? JSON.parse(req.query.filters) : {}
+            where: options
         });
 
         res.json({
@@ -107,11 +118,13 @@ router.put('/:id', async (req, res) => {
 
 // Delete - DELETE /presets/:id
 router.delete('/:id', async (req, res) => {
+
+
     await withTransaction(async (t) => {
         await ModelDeployer.removeFromModel(req.params.id, t);
 
         const deleted = await db.AiPreset.destroy({
-            where: { id: req.params.id },
+            where: { id: req.params.id, ...(tenantId ? { tenant_id: tenantId } : {}) },
             transaction: t
         });
 

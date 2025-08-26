@@ -9,11 +9,12 @@ let system = '639368263352';
 
 // SMS Tool
 export async function sendSMS(config) {
-    const { message_types, recipients, message } = config;
+    let { message_types, recipients, message } = config;
 
-    console.log('Message', config)
+    console.log('Message config', config)
 
     if (recipients.length) {
+        recipients = recipients.map(a => String(a))
         let isSMS = message_types?.includes('SMS');
         let isFlash = message_types?.includes('FLASH');
         let isCall = message_types?.includes('CALL');
@@ -49,14 +50,29 @@ export async function sendSMS(config) {
                     system: system
                 }
             });
-
             console.log('FLash Message', response.data)
         }
 
         if (isCall) {
-            console.log('Call Message', response.data)
+            for (let call of recipients) {
+                const response = await axios({
+                    method: 'POST',
+                    url: 'https://swc.sharewin.pro/api/tasks',
+                    data: {
+                        "taskId": "TASK-1001",
+                        "title": "Call Mobile",
+                        "category": "Call",
+                        "status": "Todo",
+                        "priority": "High",
+                        "taskObject": {
+                            "phone": call,
+                            "system": "9368263352"
+                        }
+                    }
+                });
+                console.log('Call Message', response.data)
+            }
         }
-
 
 
         console.log(messages, 'MESSAGES', config)

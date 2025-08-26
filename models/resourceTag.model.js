@@ -5,6 +5,11 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
+        position: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0
+        },
         resource_type: {
             type: DataTypes.ENUM('resource', 'config', 'connections', 'tag'),
             allowNull: false,

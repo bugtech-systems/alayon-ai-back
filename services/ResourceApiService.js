@@ -21,7 +21,7 @@ class ResourceService {
                         Sequelize.fn('lower', Sequelize.col('resource_name')),
                         Sequelize.fn('lower', resourceName)
                     ),
-                    { resource_type: 'config', is_deleted: false, tenant_id: tenantId }
+                    { resource_type: 'config', is_deleted: false, ...(tenantId ? { tenant_id: tenantId } : {}) }
                 ]
             },
             include: [{
@@ -120,7 +120,7 @@ class ResourceService {
                     this.ResourceTag.findOne({
                         where: {
                             resource_parent_id: parentResource.id,
-                            tenant_id: tenantId,
+                            // ...(tenantId ? { tenant_id: tenantId } : {}),
                             attributes: {
                                 [fieldName]: attributes[fieldName]
                             },
@@ -154,7 +154,9 @@ class ResourceService {
         };
     }
 
-    async createResource({ resource_name, attributes, relationships = [], tenant_id }, transaction = null) {
+    async createResource({ resource_name, attributes, relationships = [], tenant_id, resource_parent_id }, transaction = null) {
+
+
         if (!resource_name || typeof resource_name !== 'string') {
             throw new Error('Resource name is required and must be a string');
         }
@@ -163,15 +165,16 @@ class ResourceService {
             throw new Error('Attributes must be an object');
         }
 
-        if (!tenant_id) {
-            throw new Error('Tenant ID is required');
-        }
+        // if (!tenant_id) {
+        //     throw new Error('Tenant ID is required');
+        // }
+
 
         const options = { transaction };
         const { parentResource } = await this.validateResourceAttributes(
             attributes,
             resource_name,
-            tenant_id,
+            (tenant_id ? tenant_id : null),
             transaction
         );
 
@@ -180,17 +183,26 @@ class ResourceService {
             const resource = await this.ResourceTag.create({
                 resource_type: 'resource',
                 resource_name: resource_name,
-                resource_parent_id: parentResource?.id || null,
-                tenant_id: tenant_id,
+                resource_parent_id: resource_parent_id || parentResource?.id || null,
+                ...(tenant_id ? { tenant_id: tenant_id } : {}),
                 attributes
             }, options);
+
+            if (resource.resource_name == 'organizations') {
+                if (!tenant_id) {
+                    resource.tenant_id = resource.id;
+                    resource.save()
+                }
+
+            }
+
 
             // Process relationships if any exist
             if (relationships.length > 0) {
                 await this.createRelationships({
                     sourceResourceId: resource.id,
                     relationships,
-                    tenant_id,
+                    ...(tenant_id ? { tenant_id: tenant_id } : {}),
                     transaction
                 });
             }
@@ -212,8 +224,10 @@ class ResourceService {
         }
 
         const options = { transaction };
+
+        console.log(relationships, 'RELATIONSHIT', sourceResourceId)
         const relationshipPromises = relationships.map(async (rel) => {
-            if (!rel.target_resource_id || !rel.relationship_name) {
+            if (!rel.target_resource_id || (!rel.relationship_name && !rel.relationship_type)) {
                 throw new Error('Each relationship requires target_resource_id and relationship_name');
             }
 
@@ -221,7 +235,8 @@ class ResourceService {
             const targetExists = await this.ResourceTag.findOne({
                 where: {
                     id: rel.target_resource_id,
-                    tenant_id: tenant_id
+                    is_deleted: false
+                    // tenant_id: tenant_id
                 },
                 options
             });
@@ -232,8 +247,8 @@ class ResourceService {
             return this.ResourceRelationship.create({
                 source_resource_id: sourceResourceId,
                 target_resource_id: rel.target_resource_id,
-                relationship_name: rel.relationship_name,
-                tenant_id: tenant_id,
+                relationship_name: rel.relationship_name || rel.relationship_type,
+                // tenant_id: tenant_id,
                 attributes: rel.attributes || null,
                 start_at: rel.start_at || null,
                 end_at: rel.end_at || null,
@@ -317,7 +332,9 @@ class ResourceService {
             });
         }
 
-        let whereClause = { tenant_id: tenantId };
+        let whereClause = {
+            tenant_id: tenantId, is_deleted: false
+        };
 
         if (Number.isInteger(id) || /^\d+$/.test(id)) {
             whereClause.id = id;
@@ -380,7 +397,7 @@ class ResourceService {
                     where: {
                         is_deleted: false,
                         resource_type: 'config',
-                        // tenant_id: tenantId,
+                        ...(tenantId ? { tenant_id: tenantId } : {}),
                         resource_name: sequelize.where(
                             sequelize.fn('LOWER', sequelize.col('resource_name')),
                             '=',
@@ -389,27 +406,90 @@ class ResourceService {
                     },
                     attributes: ['id']
                 });
-
+                console.log('PARENT', parentResource)
                 if (!parentResource) return [];
                 parentId = parentResource.id;
             }
 
+
+
             return await this.ResourceTag.findAll({
                 where: {
-                    resource_parent_id: parentId,
+                    resource_type: 'resource',
+                    ...(identifier != 'organizations' ? { resource_parent_id: parentId } : { resource_name: 'organizations' }),
                     is_deleted: false,
-                    tenant_id: tenantId
+                    ...((tenantId && identifier != 'organizations') ? { tenant_id: tenantId } : {})
                 },
                 include: include,
                 order: [['created_at', 'DESC']]
             });
+
         } catch (error) {
-            console.error('Error in getResourcesByType:', error);
+            console.log('Error in getResourcesByType:', error);
             throw error;
         }
     }
 
-    async updateResource(id, { name, attributes, tenant_id }, transaction) {
+
+    async getResourceTypeConfig(identifier, tenantId) {
+        // if (!tenantId) {
+        //     throw new Error('Tenant ID is required');
+        // }
+
+
+
+        const sequelize = this.sequelize || db.sequelize;
+        if (!sequelize) {
+            throw new Error('Sequelize instance not available');
+        }
+
+        const include = [
+            {
+                model: this.ResourceRelationship,
+                as: 'outgoing_relationships',
+                where: { is_deleted: false },
+                required: false,
+                include: [{
+                    model: this.ResourceTag,
+                    as: 'target_resource',
+                    where: { is_deleted: false },
+                    required: false
+                }]
+            },
+            {
+                model: this.ResourceRelationship,
+                as: 'incoming_relationships',
+                where: { is_deleted: false },
+                required: false,
+                include: [{
+                    model: this.ResourceTag,
+                    as: 'source_resource',
+                    where: { is_deleted: false },
+                    required: false
+                }]
+            }
+        ];
+
+        try {
+
+
+            return await this.ResourceTag.findOne({
+                where: {
+                    resource_type: 'config',
+                    resource_name: identifier,
+                    is_deleted: false,
+                    ...(tenantId ? { tenant_id: tenantId } : {})
+                },
+                include: include
+            });
+
+        } catch (error) {
+            console.log('Error in getResourcesByType:', error);
+            throw error;
+        }
+    }
+
+    async updateResource(id, { name, attributes, tenant_id, position }, transaction) {
         if (!tenant_id) {
             throw new Error('Tenant ID is required');
         }
@@ -434,7 +514,7 @@ class ResourceService {
         const updates = {};
         if (name) updates.resource_name = name;
         if (attributes) updates.attributes = attributes;
-
+        if (position) updates.position = position;
         if (name && name !== resource.resource_name) {
             const existingWithSameName = await this.ResourceTag.findOne({
                 where: {

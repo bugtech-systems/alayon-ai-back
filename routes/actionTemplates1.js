@@ -51,18 +51,7 @@ router.post('/', async (req, res, next) => {
             throw new Error('Name and action_type are required');
         }
 
-        console.log({
-            name,
-            description,
-            action_type,
-            target_resource_type_id,
-            conditions,
-            field_mappings,
-            aggregations,
-            pre_hooks,
-            post_hooks,
-            ...otherBody
-        }, 'BODY')
+
 
         // Create template within transaction
         const template = await db.ActionTemplate.create({

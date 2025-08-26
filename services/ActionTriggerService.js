@@ -73,6 +73,13 @@ export class ActionService {
         trigger.update({ next_execution: scheduledJobs[jobName]?.nextInvocation() });
     }
 
+    static cancelTrigger(trigger) {
+        const jobName = `trigger ${trigger}`;
+        // Cancel existing job if any
+        cancelJob(jobName);
+        // Calculate next execution time
+    }
+
     static calculateNextExecution(trigger) {
         const config = trigger.trigger_config;
 
@@ -139,7 +146,6 @@ export class ActionService {
             await log.update({ status: 'RUNNING' });
         }
 
-        console.log(template.config, parameters, 'ACT TR')
 
 
         try {
