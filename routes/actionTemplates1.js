@@ -1,239 +1,248 @@
 import express from 'express';
+// import { validateRequest } from '../middleware/validation.js';
 import { db } from '../models/index.js';
-import { executeTemplate } from '../services/ActionTemplateService1.js';
+import { ActionEngine } from '../services/ActionEngine.js';
+import { ActionService } from '../services/ActionTriggerService.js';
+import { findActionTemplateByName, getOrganizationById, getOrganizationsByNumber } from '../services/ResourceService.js';
+import { AIAgent } from '../services/aiAgent.js';
+import { sessionManager } from '../services/sessionStore.js';
+import { chatExecute } from '../controllers/actionController.js';
+import { sanitizePhoneNumber } from '../helpers/helpers.js';
+import { sendSMS, sendSpeak } from '../services/communicationService.js';
+
+
+
+const actionEngine = new ActionEngine();
+
 
 const router = express.Router();
 
-/**
- * @swagger
- * tags:
- *   name: ActionTemplates
- *   description: Action template management
- */
-
-/**
- * @swagger
- * /api/v1/action-templates:
- *   post:
- *     summary: Create a new action template
- *     tags: [ActionTemplates]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ActionTemplate'
- *     responses:
- *       201:
- *         description: Created action template
- *       400:
- *         description: Validation error
- */
+// Create a new action template
 router.post('/', async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
     try {
-        const {
-            name,
-            description,
-            action_type,
-            target_resource_type_id,
-            conditions = {},
-            field_mappings = {},
-            aggregations = [],
-            pre_hooks = [],
-            post_hooks = [],
-            parameters = [],
-            ...otherBody
-        } = req.body;
-
-        // Validate required fields
-        if (!name || !action_type) {
-            throw new Error('Name and action_type are required');
-        }
-
-
-
-        // Create template within transaction
+    
+    
+    
         const template = await db.ActionTemplate.create({
-            name,
-            description,
-            action_type,
-            target_resource_type_id,
-            conditions,
-            field_mappings,
-            aggregations,
-            pre_hooks,
-            post_hooks,
-            ...otherBody
-        }, { transaction });
-
-        // Create parameters within the same transaction
-        if (parameters.length > 0) {
-            await db.ActionTemplateParameter.bulkCreate(
-                parameters.map(param => ({
-                    ...param,
-                    template_id: template.id
-                })),
-                { transaction }
-            );
-        }
-
-        // Fetch the complete record WITHIN the transaction
-        const createdTemplate = await db.ActionTemplate.findByPk(template.id, {
-            include: ['target_resource_type', 'parameters'],
-            transaction
+            ...req.body,
+            ...(req.tenantId ? { tenant_id: req.tenantId } : {})
         });
-
-        // Commit only after all operations succeed
-        await transaction.commit();
-
-        res.status(201).json(createdTemplate);
+        
+        
+        
+        console.log()
+        
+        res.status(201).json(template);
     } catch (error) {
-        await transaction.rollback();
-        console.log(error, 'ERROR')
-        next(error);
+    console.log(error, 'ERROR')
+        res.status(400).json({ error: error.message });
     }
 });
 
-/**
- * @swagger
- * /api/v1/action-templates:
- *   get:
- *     summary: Get all action templates
- *     tags: [ActionTemplates]
- *     responses:
- *       200:
- *         description: List of action templates
- */
-router.get('/', async (req, res, next) => {
+// Execute an action template
+router.post('/:templateId/execute', async (req, res) => {
     try {
-        const templates = await db.ActionTemplate.findAll({
-            include: [
-                {
-                    model: db.ResourceTag,
-                    as: 'target_resource_type',
-                    attributes: ['id', 'name', 'type']
-                },
-                {
-                    model: db.ActionTemplateParameter,
-                    as: 'parameters',
-                    attributes: ['id', 'name', 'data_type', 'required']
-                }
-            ],
-            order: [['created_at', 'DESC']]
-        });
-        res.json(templates);
-    } catch (error) {
-        next(error);
-    }
-});
+        const { conversation_id, parameters: rawParams = {} } = req.body;
 
-/**
- * @swagger
- * /api/v1/action-templates/{id}:
- *   get:
- *     summary: Get a specific action template
- *     tags: [ActionTemplates]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Action template data
- *       404:
- *         description: Action template not found
- */
-router.get('/:id', async (req, res, next) => {
-    try {
-        const template = await db.ActionTemplate.findByPk(req.params.id, {
-            include: [
-                {
-                    model: db.ResourceTag,
-                    as: 'target_resource_type',
-                    attributes: ['id', 'name', 'type']
-                },
-                {
-                    model: db.ActionTemplateParameter,
-                    as: 'parameters'
-                }
-            ]
-        });
-
+        // 1. Fetch template
+        const template = await findActionTemplateByName(req.params.templateId);
         if (!template) {
-            return res.status(404).json({ error: 'Action template not found' });
+            return res.status(400).json({ message: "Template doesn't exist." });
         }
 
-        res.json(template);
+        const parameters = { ...rawParams };
+        const validationErrors = [];
+
+        // 2. Build a parameter definition map for easier lookup
+        const paramMap = {};
+        for (const p of template.parameters) {
+            paramMap[p.field_name] = p;
+        }
+
+        // 3. Check for missing required parameters
+        const missingRequiredParams = template.parameters
+            .filter(p => p.is_required && (parameters[p.field_name] === undefined || parameters[p.field_name] === null || parameters[p.field_name] === ''))
+            .map(p => p.field_name);
+
+        if (missingRequiredParams.length > 0) {
+            validationErrors.push({
+                type: 'MISSING_REQUIRED',
+                message: 'Missing required parameters',
+                details: missingRequiredParams
+            });
+        }
+
+        // 4. Check for parameters not defined in the template
+        const allowedParamNames = Object.keys(paramMap);
+        const extraParams = Object.keys(parameters).filter(
+            paramName => !allowedParamNames.includes(paramName)
+        );
+        if (extraParams.length > 0) {
+            validationErrors.push({
+                type: 'EXTRA_PARAMETERS',
+                message: 'Parameters not allowed by template',
+                details: extraParams
+            });
+        }
+
+        // 5. Validate type, allowed values, and regex pattern
+        const typeErrors = [];
+        const allowedValueErrors = [];
+        const regexErrors = [];
+
+        for (const [name, value] of Object.entries(parameters)) {
+            const def = paramMap[name];
+            if (!def) continue; // skip if not in template
+
+            // a) Type validation
+            if (def.type) {
+                let isValidType = true;
+                switch (def.type) {
+                    case 'string':
+                        isValidType = typeof value === 'string';
+                        break;
+                    case 'number':
+                        isValidType = typeof value === 'number' && !isNaN(value);
+                        break;
+                    case 'boolean':
+                        isValidType = typeof value === 'boolean';
+                        break;
+                    case 'array':
+                        isValidType = Array.isArray(value);
+                        break;
+                    default:
+                        break; // unknown type, skip
+                }
+                if (!isValidType) {
+                    typeErrors.push({ parameter: name, expected: def.type, received: typeof value });
+                }
+            }
+
+            // b) Allowed values check
+            if (def.allowed_values && Array.isArray(def.allowed_values)) {
+                if (!def.allowed_values.includes(value)) {
+                    allowedValueErrors.push({ parameter: name, value, allowed: def.allowed_values });
+                }
+            }
+
+            // c) Regex pattern check
+            if (def.regex_pattern) {
+                const pattern = new RegExp(def.regex_pattern);
+                if (!pattern.test(value)) {
+                    regexErrors.push({ parameter: name, value, pattern: def.regex_pattern });
+                }
+            }
+        }
+
+        if (typeErrors.length > 0) {
+            validationErrors.push({ type: 'INVALID_TYPE', message: 'Invalid parameter type(s)', details: typeErrors });
+        }
+        if (allowedValueErrors.length > 0) {
+            validationErrors.push({ type: 'INVALID_VALUE', message: 'Value not in allowed list', details: allowedValueErrors });
+        }
+        if (regexErrors.length > 0) {
+            validationErrors.push({ type: 'INVALID_FORMAT', message: 'Value does not match required pattern', details: regexErrors });
+        }
+
+        // 6. Apply default values for missing optional parameters
+        for (const paramDef of template.parameters) {
+            if (parameters[paramDef.field_name] === undefined && paramDef.default_value !== undefined) {
+                parameters[paramDef.field_name] = paramDef.default_value;
+            }
+        }
+
+        // 7. Return all validation errors if present
+        if (validationErrors.length > 0) {
+            return res.status(400).json({
+                error: 'Parameter validation failed',
+                validationErrors
+            });
+        }
+
+        // 8. Create trigger
+        const trigger = await db.ActionTrigger.create({
+            ...req.body,
+            action_template_id: template.id,
+            tool_type: template.tool_type,
+            parameters
+        });
+
+        let result = null;
+        if (trigger.trigger_type !== 'IMMEDIATE') {
+            await ActionService.scheduleTrigger(trigger);
+        } else {
+            result = await actionEngine.execute(template, parameters);
+        }
+
+        res.status(200).json({
+            status: 200,
+            ...result
+        });
+
     } catch (error) {
-        console.log(error, 'ERROR')
-        next(error);
+        console.error(error, "Execution error");
+        res.status(400).json({
+            error: error?.message || 'Execution failed',
+            details: error?.details || null
+        });
     }
 });
 
-/**
- * @swagger
- * /api/v1/action-templates/{name}/execute:
- *   post:
- *     summary: Execute an action template
- *     tags: [ActionTemplates]
- *     parameters:
- *       - in: path
- *         name: name
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               parameters:
- *                 type: object
- *                 description: Key-value pairs of parameters
- *     responses:
- *       200:
- *         description: Template execution result
- *       400:
- *         description: Missing required parameters
- *       404:
- *         description: Action template not found
- */
-router.post('/:name/execute', async (req, res, next) => {
+router.post('/:templateId/chat', async (req, res) => {
+    const { conversation_id, message } = req.body;
+
+    let session = await sessionManager.getSession(conversation_id);
+    // let session = sessionManager.getSession('session_420230');
+
+
+
     try {
-        const { name } = req.params;
-        const { parameters = {} } = req.body;
 
-        const template = await db.ActionTemplate.findOne({
-            where: { name },
-            include: [
-                {
-                    model: db.ResourceTag,
-                    as: 'target_resource_type'
-                },
-                {
-                    model: db.ActionTemplateParameter,
-                    as: 'parameters',
-                    required: false
-                }
-            ]
-        });
+        if (!session) {
+            console.log('[Session] Creating new session');
+            session = await sessionManager.createSession(conversation_id);
 
-        if (!template) {
-            return res.status(404).json({ error: 'Action template not found' });
+        } else {
+            console.log(`[Session] Using existing session: ${session.id}`);
         }
+
+        let template = await findActionTemplateByName(req.params.templateId);
+        // let result;
+
+        if (!template) return res.status(400).json({ message: "Template doesn't exist." })
+
+
+        const agent = new AIAgent('template_engine', session.conversation_id);
+
+
+
+
+        await agent.initialize(session, template.id);
+
+        console.log('[MESSAGE] Processing user input...');
+
+
+
+        const response = await agent.generateAction(message, template);
+
+
+        console.log('[MESSAGE] Action processed', JSON.stringify(response));
+
+
+
+
+
+
+
 
         // Validate parameters against template requirements
         const validationErrors = [];
-
+        const parameters = response.parameters;
+        const config = response.template_output;
         // 1. Check for missing required parameters
         const missingRequiredParams = template.parameters
-            .filter(p => p.is_required && !parameters.hasOwnProperty(p.name) && !p.default_value)
-            .map(p => p.name);
+            .filter(p => p.is_required && !parameters.hasOwnProperty(p.field_name) && !p.default_value)
+            .map(p => p.field_name);
 
         if (missingRequiredParams.length > 0) {
             validationErrors.push({
@@ -244,7 +253,7 @@ router.post('/:name/execute', async (req, res, next) => {
         }
 
         // 2. Check for parameters not defined in the template
-        const allowedParamNames = template.parameters.map(p => p.name);
+        const allowedParamNames = template.parameters.map(p => p.field_name);
         const extraParams = Object.keys(parameters).filter(
             paramName => !allowedParamNames.includes(paramName)
         );
@@ -257,42 +266,13 @@ router.post('/:name/execute', async (req, res, next) => {
             });
         }
 
-        // 3. Validate parameter values against allowed fields (if template has field restrictions)
-        // if (template.allowed_fields && template.allowed_fields.length > 0) {
-        //     const allowedFieldValues = template.allowed_fields.reduce((acc, field) => {
-        //         acc[field.field_name] = field.allowed_values
-        //             ? JSON.parse(field.allowed_values)
-        //             : null;
-        //         return acc;
-        //     }, {});
 
-        //     const invalidFieldValues = [];
-
-        //     for (const [paramName, paramValue] of Object.entries(parameters)) {
-        //         if (allowedFieldValues[paramName] &&
-        //             !allowedFieldValues[paramName].includes(paramValue)) {
-        //             invalidFieldValues.push({
-        //                 parameter: paramName,
-        //                 value: paramValue,
-        //                 allowed: allowedFieldValues[paramName]
-        //             });
-        //         }
-        //     }
-
-        //     if (invalidFieldValues.length > 0) {
-        //         validationErrors.push({
-        //             type: 'INVALID_VALUES',
-        //             message: 'Parameter values not in allowed values',
-        //             details: invalidFieldValues
-        //         });
-        //     }
-        // }
 
         // 4. Apply default values for missing optional parameters
         if (template.parameters && template.parameters.length) {
             for (const param of template.parameters) {
-                if (!parameters.hasOwnProperty(param.name) && param.default_value) {
-                    parameters[param.name] = param.default_value;
+                if (!parameters.hasOwnProperty(param.field_name) && param.default_value) {
+                    parameters[param.field_name] = param.default_value;
                 }
             }
         }
@@ -305,39 +285,304 @@ router.post('/:name/execute', async (req, res, next) => {
             });
         }
 
-        // Execute template if validation passes
-        const result = await executeTemplate(template, parameters);
-        res.json(result);
+
+
+
+        let result = null;
+
+
+
+        const trigger = await db.ActionTrigger.create({
+            ...req.body,
+            action_template_id: template.id,
+            tool_type: template.tool_type,
+            parameters: parameters
+        });
+
+
+
+        if (trigger.trigger_type !== 'IMMEDIATE') {
+            await ActionService.scheduleTrigger(trigger);
+        } else {
+            // this.executeImmediately(trigger);
+            result = await actionEngine.execute(
+                { ...template, config },
+                parameters
+            );
+        }
+
+
+
+
+
+
+        res.status(200).json({
+            status: 200,
+            data: result
+        });
     } catch (error) {
-        console.error('Template execution error:', error);
-        next(error);
+        console.log(error, 'ERRR')
+        // console.log(error, "ERRORrr")
+        res.status(400).json({
+            error: error?.message,
+            details: error?.details
+        });
     }
 });
 
-/**
- * @swagger
- * /api/v1/action-templates/{id}:
- *   put:
- *     summary: Update an action template
- *     tags: [ActionTemplates]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ActionTemplate'
- *     responses:
- *       200:
- *         description: Updated action template
- *       404:
- *         description: Action template not found
- */
+router.post('/chat', async (req, res) => {
+  try {
+    const { conversation_id, message, speak, attachments } = req.body;
+
+    // Ensure session exists
+    let session = await sessionManager.getSession(conversation_id);
+    if (!session) session = await sessionManager.createSession(conversation_id);
+
+    // Get org context
+    const org = await getOrganizationById(req.tenantId);
+
+    // Step 1: Select action template
+    const selectorTemplate = await findActionTemplateByName('action_selector', org?.id);
+    const selection = await actionEngine.execute(selectorTemplate, { message });
+
+    // Step 2: Execute selected template
+    const execTemplate = await findActionTemplateByName(selection.data.selected_template, org?.id);
+    const execResult = await chatExecute({
+      message,
+      sessionId: session.id,
+      template: execTemplate,
+      action: selection.data,
+      tenant_id: org?.id
+    });
+
+    // Step 3: Generate AI response
+    const agent = new AIAgent(`alayon_model_${org?.id}`, session.conversation_id);
+    await agent.initialize(session, org?.id);
+    const alayonResult = await agent.generateAlayon(message, execResult);
+
+    // Step 4: Persist session
+    await sessionManager.updateSession(session.id, session);
+
+    // Step 5: Post-hooks
+    const aiMessage = execResult?.message || alayonResult?.message;
+    const recipients = [
+      ...(execResult?.recipients || []),
+      ...(alayonResult?.recipients || [])
+    ];
+
+    if (speak || selection.data?.post_hook_type?.includes('SPEAK')) {
+      await sendSpeak({ message: aiMessage });
+    }
+
+    if (selection.data?.post_hook_type?.length) {
+      await sendSMS({
+        message_types: selection.data.post_hook_type,
+        recipients,
+        message: aiMessage
+      });
+    }
+
+    return res.status(200).json({
+      message: aiMessage,
+      result: { execResult, alayonResult }
+    });
+  } catch (error) {
+    console.error(error, 'CHAT ERROR');
+    res.status(400).json({ error: error?.message, details: error?.details });
+  }
+});
+
+router.post('/sms', async (req, res) => {
+  try {
+    const { sender, message, system } = req.body;
+    const convId = sanitizePhoneNumber(sender);
+
+    // Ensure session exists
+    let session = await sessionManager.getSession(convId);
+    if (!session) session = await sessionManager.createSession(convId);
+
+    if (sanitizePhoneNumber(sender) === sanitizePhoneNumber(system)) {
+      return res.status(200).json({ message: 'Sender and receiver cannot be the same.' });
+    }
+
+    // Get org + user context
+    const org = await getOrganizationsByNumber(sanitizePhoneNumber(system));
+    const user = await sessionManager.handleMobileSubscription(sender, org?.id);
+
+    const subscriptionTemplate = await findActionTemplateByName('check_subscription', org?.id);
+
+    session.tenant_id = org?.id;
+    if (!user.attributes.isSubscribe) session.status = 'Not yet subscribe';
+
+    // Step 1: Run subscription check
+    const subResult = await actionEngine.execute(subscriptionTemplate, {
+      message: `##USER CONTEXT: ${JSON.stringify(user.attributes, null, 2)}\n\n` +
+               `##CURRENT SCENARIO: ${session.status}\n\n` +
+               `##USER PROMPT: ${message}`
+    });
+
+    // Step 2: Handle unsubscribed users
+    if (!user.attributes.isSubscribe) {
+      const smsAction = await findActionTemplateByName('send_sms', org?.id);
+
+      if (subResult.context.outputs.main.scenario === 'subscription_onboarding') {
+        await sessionManager.handleUpdateMobile(user.id, subResult.context.outputs.main, true);
+        await actionEngine.execute(smsAction, {
+          message: subResult?.data.message,
+          recipients: [sender],
+          message_types: ['FLASH']
+        });
+      }
+
+      await actionEngine.execute(smsAction, {
+        message: subResult?.data.message,
+        recipients: [sender]
+      });
+
+      session.status = subResult.context.outputs.main.scenario;
+      await sessionManager.updateSession(session.id, session);
+
+      return res.status(200).json(subResult?.data);
+    }
+
+    // Step 3: Handle subscribed users → Action Selection
+    const selectorTemplate = await findActionTemplateByName('action_selector', org?.id);
+    const selection = await actionEngine.execute(selectorTemplate, { message });
+    let execResult;
+    
+    
+    
+    
+    if (selection.data.selected_template !== 'check_subscription') {
+      const execTemplate = await findActionTemplateByName(selection.data.selected_template, org?.id);
+      
+      console.log(execTemplate, org.id, 'ORG TEMPLATE ')
+      execResult = await chatExecute({
+        message: 
+         `##USER CONTEXT: ${JSON.stringify(user.attributes, null, 2)}\n\n` +
+               `##CURRENT SCENARIO: ${session.status}\n\n` +
+               `##USER PROMPT: ${message}`
+        ,
+        sessionId: session.id,
+        template: execTemplate,
+        action: selection.data,
+        tenant_id: org?.id
+      });
+    } else {
+    
+      execResult = await actionEngine.execute(subscriptionTemplate, {
+        message: `##USER CONTEXT: ${JSON.stringify(user.attributes, null, 2)}\n\n` +
+                 `##CURRENT SCENARIO: ${session.status}\n\n` +
+                 `##USER PROMPT: ${message}`
+      });
+      session.status = execResult.context.outputs.main.scenario;
+      if (session.status === 'unsubscribe') {
+        await sessionManager.handleUpdateMobile(user.id, subResult.context.outputs.main, false);
+      }
+      await sessionManager.updateSession(session.id, session);
+    }
+
+
+console.log(selection.data.selected_template, 'action template')
+
+    // Step 4: AI response if needed
+    let alayonResult;
+    if (selection.data.selected_template === `alayon_waters_assistant`) {
+      alayonResult = execResult;
+            console.log('ALAYON WATER AGIAN')
+
+    } else if (selection.data.selected_template === 'check_subscription') {
+      alayonResult = execResult.data;
+                  console.log('SUBSCRIPTION  AGIAN')
+
+    } else {
+      const agent = new AIAgent(`alayon_model_${org?.id}`, session.conversation_id);
+      await agent.initialize(session, org?.id);
+      alayonResult = await agent.generateAlayon(message, execResult);
+      console.log('ALAYON MODEL AGIAN')
+    }
+
+    // Step 5: Post-hooks
+    const smsAction = await findActionTemplateByName('send_sms', org?.id);
+    const recipients =  alayonResult?.recipients || execResult?.recipients  || [];
+    const hooks = selection.data.post_hook_type || [];
+
+    await sessionManager.updateSession(session.id, session);
+
+    if (selection.data.trigger_type !== 'IMMEDIATE') {
+      const trigger = await db.ActionTrigger.create({
+        trigger_config: selection.data.trigger_config,
+        trigger_type: selection.data.trigger_type,
+        action_template_id: smsAction.id,
+        tool_type: smsAction.tool_type,
+        parameters: {
+          message: alayonResult.message || execResult.message,
+          recipients: [sender, ...recipients],
+          message_types: ['SMS', ...hooks]
+        }
+      });
+      await ActionService.scheduleTrigger(trigger);
+      return res.status(200).json({
+        result: execResult,
+        message: `${smsAction.trigger_type} Action Scheduled!`
+      });
+    } else {
+      await actionEngine.execute(smsAction, {
+        message: alayonResult.message || execResult.message,
+        recipients: [...recipients, sender],
+        message_types: ['SMS', ...hooks]
+      });
+      return res.status(200).json({ execute: execResult, message: alayonResult });
+    }
+  } catch (error) {
+    console.error(error, 'SMS ERROR');
+    res.status(400).json({ error: error?.message, details: error?.details });
+  }
+});
+
+// Get all action templates
+router.get('/', async (req, res) => {
+    try {
+        const templates = await db.ActionTemplate.findAll({
+            where: {
+                ...(req.tenantId ? { tenant_id: req.tenantId } : {})
+            },
+            order: [['updated_at', 'DESC']]
+        });
+        res.json(templates);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get template by name
+router.get('/:name', async (req, res) => {
+    try {
+        const template = await db.ActionTemplate.findOne({
+            where: {
+                name: req.params.name,
+                ...(req.tenantId ? { tenant_id: req.tenantId } : {})
+
+            },
+            include: [
+                {
+                    model: db.ActionTemplateParameter,
+                    as: 'parameters'
+                }
+            ]
+        });
+
+        if (!template) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+
+        res.json(template);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update template
 router.put('/:id', async (req, res, next) => {
     const transaction = await db.sequelize.transaction();
     try {
@@ -345,71 +590,95 @@ router.put('/:id', async (req, res, next) => {
         const { parameters, ...templateData } = req.body;
 
         // Validate template exists
-        const existingTemplate = await db.ActionTemplate.findByPk(id, { transaction });
+        const existingTemplate = await db.ActionTemplate.findByPk(id, {
+            /*   include: [{
+                  model: db.ActionTemplateParameter,
+                  as: 'parameters'
+              }], */
+            transaction
+        });
+
         if (!existingTemplate) {
             await transaction.rollback();
             return res.status(404).json({ error: 'Action template not found' });
         }
 
-
-
         // Update template fields
-        const [updated] = await db.ActionTemplate.update(templateData, {
+        const [updated] = await db.ActionTemplate.update({
+            ...(req.tenantId ? { tenant_id: req.tenantId } : {}),
+            parameters, ...templateData
+        }, {
             where: { id },
             transaction
         });
 
-
-
-        if (!updated) {
-            await transaction.rollback();
-            return res.status(400).json({ error: 'Failed to update action template' });
-        }
-
         // Handle parameter updates if provided
-        if (parameters && Array.isArray(parameters)) {
-            // First delete all existing parameters
-            await db.ActionTemplateParameter.destroy({
-                where: { template_id: id },
-                transaction
-            });
-
-            // Then create new parameters
-            await db.ActionTemplateParameter.bulkCreate(
-                parameters.map(param => ({
-                    ...param,
-                    template_id: id
-                })),
-                { transaction }
-            );
-        }
-
+        /*   if (parameters && Array.isArray(parameters)) {
+              const existingParams = existingTemplate.parameters || [];
+              const newParams = parameters || [];
+         
+              // Identify parameters to keep, update, and create
+              const paramsToKeep = existingParams.filter(ep =>
+                  newParams.some(np => np.id === ep.id)
+              );
+              const paramsToDelete = existingParams.filter(ep =>
+                  !newParams.some(np => np.id === ep.id)
+              );
+              const paramsToCreate = newParams.filter(np => !np.id);
+              const paramsToUpdate = newParams.filter(np =>
+                  np.id && existingParams.some(ep => ep.id === np.id)
+              );
+         
+              // Perform batch operations
+              await Promise.all([
+                  // Delete removed parameters
+                  paramsToDelete.length > 0 && db.ActionTemplateParameter.destroy({
+                      where: {
+                          id: paramsToDelete.map(p => p.id),
+                          template_id: id
+                      },
+                      transaction
+                  }),
+         
+                  // Update modified parameters
+                  ...paramsToUpdate.map(param =>
+                      db.ActionTemplateParameter.update(param, {
+                          where: { id: param.id },
+                          transaction
+                      })
+                  ),
+         
+                  // Create new parameters
+                  paramsToCreate.length > 0 && db.ActionTemplateParameter.bulkCreate(
+                      paramsToCreate.map(param => ({
+                          ...param,
+                          template_id: id
+                      })),
+                      { transaction }
+                  )
+              ]);
+          }
+        */
         // Fetch the fully updated template
         const updatedTemplate = await db.ActionTemplate.findByPk(id, {
             include: [
-                {
-                    model: db.ResourceTag,
-                    as: 'target_resource_type',
-                    attributes: ['id', 'name', 'type']
-                },
-                {
-                    model: db.ActionTemplateParameter,
-                    as: 'parameters',
-                    attributes: ['id', 'name', 'data_type', 'required', 'default_value']
-                }
+
+                // {
+                //     model: db.ActionTemplateParameter,
+                //     as: 'parameters',
+                //     attributes: ['id', 'name', 'data_type', 'required', 'default_value']
+                // }
             ],
             transaction
         });
 
         await transaction.commit();
-        res.json(updatedTemplate);
+        return res.json(updatedTemplate);
     } catch (error) {
         if (transaction.finished !== 'commit') {
             await transaction.rollback();
         }
 
-
-        console.log(error, 'ERROR')
         console.error('Error updating action template:', error);
 
         if (error.name === 'SequelizeValidationError') {
@@ -433,58 +702,23 @@ router.put('/:id', async (req, res, next) => {
     }
 });
 
-/**
- * @swagger
- * /api/v1/action-templates/{id}:
- *   delete:
- *     summary: Delete an action template
- *     tags: [ActionTemplates]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Action template deleted
- *       404:
- *         description: Action template not found
- */
-router.delete('/:id', async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
+// Delete template
+router.delete('/:id', async (req, res) => {
     try {
-        // First delete parameters to maintain referential integrity
-        await db.ActionTemplateParameter.destroy({
-            where: { template_id: req.params.id },
-            transaction
-        });
-
         const deleted = await db.ActionTemplate.destroy({
-            where: { id: req.params.id },
-            transaction
+            where: { id: req.params.id }
         });
 
         if (!deleted) {
-            await transaction.rollback();
-            return res.status(404).json({ error: 'Action template not found' });
+            return res.status(404).json({ error: 'Template not found' });
         }
 
-        await transaction.commit();
-        res.json({ message: 'Action template and associated parameters deleted successfully' });
+        res.json({ message: 'Template deleted successfully' });
     } catch (error) {
-        await transaction.rollback();
-        next(error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// Error handling middleware
-router.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({
-        error: 'Internal server error',
-        message: err.message
-    });
-});
+
 
 export default router;

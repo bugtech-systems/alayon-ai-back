@@ -1,0 +1,68 @@
+{
+  "conversation_templates": [
+    {
+      "scenario": "welcome_greeting",
+      "user_input": ["hi", "hello", "good morning", "good afternoon", "hey", "magandang umaga", "magandang hapon"],
+      "ai_response": "Hello! Welcome to Alayon Water Delivery Service! 🌊 How can I help you today? You can book water delivery, refer friends, ask about products, or inquire about delivery.",
+      "required_fields": []
+    },
+    {
+      "scenario": "water_booking_start",
+      "user_input": ["book water", "order water", "need water delivery", "pa-deliver tubig", "magpa-deliver", "water order"],
+      "ai_response": "Great! Let's get your water delivery scheduled. Are you looking for a one-time delivery or recurring subscription?",
+      "required_fields": []
+    },
+    {
+      "scenario": "booking_frequency",
+      "user_input": ["one-time", "one time", "single delivery", "isa lang", "today only"],
+      "ai_response": "Okay, one-time delivery! What type of water would you like? We have: 5-gallon Mineral Water (₱50), 5-gallon Purified Water (₱45), 1-gallon Bottled Water (₱25), 3-gallon Premium Water (₱120)",
+      "required_fields": ["delivery_type"]
+    },
+    {
+      "scenario": "provide_water_type",
+      "user_input": ["mineral", "purified", "5-gallon", "1-gallon", "premium", "3-gallon"],
+      "ai_response": "Perfect! {water_type} selected. How many containers would you like?",
+      "required_fields": ["water_type"]
+    },
+    {
+      "scenario": "provide_quantity",
+      "user_input": ["1", "2", "3", "4", "5", "one", "two", "three", "dalawa", "tatlo", "isa"],
+      "ai_response": "Got it! {bottle_quantity} container(s) of {water_type}. What's your full name for the delivery?",
+      "required_fields": ["bottle_quantity"]
+    },
+    {
+      "scenario": "provide_name",
+      "user_input": ["my name is *", "i'm *", "ako si *", "this is *", "pangalan ko *"],
+      "ai_response": "Salamat, {customer_name}! What's your complete delivery address? (Street, Barangay, City)",
+      "required_fields": ["customer_name"]
+    },
+    {
+      "scenario": "provide_address",
+      "user_input": ["address *", "deliver to *", "sa *", "taga *", "location *"],
+      "ai_response": "Noted! Delivery to {delivery_address}. What's your contact number for delivery updates?",
+      "required_fields": ["delivery_address"]
+    },
+    {
+      "scenario": "provide_phone",
+      "user_input": ["phone *", "number *", "contact *", "09*", "+63*"],
+      "ai_response": "Thank you! Contact number {contact_phone} recorded. When would you like your delivery? (ASAP, today, specific date/time)",
+      "required_fields": ["contact_phone"]
+    },
+    {
+      "scenario": "provide_delivery_time",
+      "user_input": ["asap", "now", "today", "tomorrow", "bukas", "mamaya"],
+      "ai_response": "ORDER SUMMARY 📝 - Name: {customer_name}, Address: {delivery_address}, Phone: {contact_phone}, Order: {bottle_quantity} × {water_type}, Delivery: {preferred_time}, Total: ₱{total_price}. Reply CONFIRM to schedule!",
+      "required_fields": ["preferred_time"]
+    },
+    {
+      "scenario": "booking_confirmation",
+      "user_input": ["confirm", "yes", "okay", "go ahead", "schedule it", "oo", "sige"],
+      "ai_response": "✅ DELIVERY CONFIRMED! Your water delivery has been scheduled! Expected delivery: 2-4 hours. Driver will call before delivery.",
+      "required_fields": []
+    }
+  ],
+  "response_templates": {
+    "greeting": "Hello! Welcome to Alayon Water Delivery Service! 🌊 How can I help you today?",
+    "fallback": "I'm here to help with Alayon Water Delivery! You can ask about booking, referrals, products, delivery, or payment."
+  }
+}

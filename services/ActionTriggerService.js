@@ -130,7 +130,6 @@ export class ActionService {
         if (!template) throw new Error('Template not found');
 
 
-        console.log('exxec', parameters)
 
         let log;
         if (!logId) {

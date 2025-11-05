@@ -51,14 +51,14 @@ router.post('/', async (req, res) => {
                         Sequelize.fn('lower', Sequelize.col('resource_name')),
                         Sequelize.fn('lower', resource_name)
                     ),
-                    { resource_type: 'config', is_deleted: false, tenant_id: req.tenantId },
+                    { resource_type: 'config'}, { is_deleted: false}, {tenant_id: req.tenantId },
                 ]
             },
             transaction
         });
 
 
-
+            console.log(existingResource, 'EXISTING')
 
 
         if (existingResource) {
@@ -101,6 +101,7 @@ router.post('/', async (req, res) => {
         await transaction.commit();
         res.status(201).json(resourceType);
     } catch (error) {
+    console.log(error, 'ERRR')
         // Only rollback if transaction hasn't completed
         if (transaction.finished !== 'commit') {
             await transaction.rollback();

@@ -1,9 +1,8 @@
 import { ActionService } from '../services/ActionTriggerService.js';
 import { db } from '../models/index.js';
-import { sessionManager } from '../services/sessionStore.js';
-import { findActionTemplateByName } from '../services/ResourceService.js';
 import { ActionEngine } from '../services/ActionEngine.js';
-import { AIAgent } from '../services/aiAgent.js';
+import { AIService  } from '../services/aiService.js';
+import contextManager from '../services/contextManager1.js';
 
 
 const actionEngine = new ActionEngine();
@@ -111,44 +110,49 @@ export const cancelAllTrigger = async (req, res) => {
 };
 
 export const chatExecute = async (options) => {
-    const { sessionId, message, template, action, tenant_id } = options;
+    const { sessionId, message, template, tenant_id } = options;
 
-    let session = await sessionManager.getSession(sessionId);
-    // let session = sessionManager.getSession('session_420230');
 
+    let session = await contextManager.getSession(sessionId);
 
 
     try {
 
 
-        if (!session) {
-            console.log('[Session] Creating new session');
-            session = await sessionManager.createSession(sessionId);
-
-        } else {
-            console.log(`[Session] Using existing session: ${session.id}`, session);
-        }
-
         // let result;
 
         if (!template) return { error: true, message: "Template doesn't exist." };
+        
+        contextManager.addContext(session.id, { tenant_id })
 
 
-        const agent = new AIAgent(`template_engine_${tenant_id}`, session.conversation_id);
+ 
+  
+        const ai = await new AIService(session.id, `template_engine_${tenant_id}`).init();
+
+        const response = await ai.generateTemplate(message, template);
 
 
 
 
-        await agent.initialize(session, tenant_id);
-
-        console.log('[MESSAGE] Processing user input...', template);
 
 
 
-        const response = await agent.generateAction(message, template);
+        // const agent = new AIAgent(`template_engine_${tenant_id}`, session.conversation_id);
 
 
-        console.log('[MESSAGE] Action processed', JSON.stringify(response));
+
+
+        // await agent.initialize(session, tenant_id);
+
+        // console.log('[MESSAGE] Processing user input...', template);
+
+
+
+        // const response = await agent.generateAction(message, template);
+
+
+        // console.log('[MESSAGE] Action processed', JSON.stringify(response));
 
 
         // Validate parameters against template requirements

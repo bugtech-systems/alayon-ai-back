@@ -4,9 +4,6 @@ import { OllamaClient } from '../helpers/ollama-client.js';
 import { ActionEngine } from '../services/ActionEngine.js';
 import { cleanAndParseJSON, generateFromSchema, isJsonParsable, generateExecutionId, generateFieldTypeMap, generateSessionId } from '../helpers/helpers.js';
 import * as expressionEvaluator from './expressionEvaluator.js';
-import { resolveConfig, resolveParameters, resolvePlaceholders } from '../helpers/parameterResolver.js';
-
-import { ModelDeployer } from '../services/model-deployer.js';
 import { Op } from 'sequelize';
 
 
@@ -234,7 +231,6 @@ export class AIAgent {
         let newMessages = messages.map(a => ({ ...a, content: typeof a.content != 'string' ? JSON.stringify(a.content) : a.content }))
 
 
-        console.log('GENERATE ALAYON MESSAGES', newMessages)
 
 
         let newOptions = { ...this.options, ...this.model.parameters }
@@ -299,7 +295,6 @@ export class AIAgent {
         );
 
 
-        console.log('ACTION MESSAGE', messages)
 
 
         let response = await this.processResponse(rawResponse)
@@ -312,95 +307,8 @@ export class AIAgent {
         return response;
     }
 
-    //     async generate(userInput, options) {
-    //     // Save user message
-    //     const resolvedInput = expressionEvaluator.resolveFieldMappings(
-    //         resolveConfig(userInput, this.context),
-    //         this.context
-    //     );
 
-    //     const resolvedSystemInput = expressionEvaluator.resolveFieldMappings(
-    //         resolveConfig(this.model.system_prompt, this.context),
-    //         this.context
-    //     );
-
-    //     let userMessage = await this.saveMessage('user', resolvedInput, 1);
-
-    //     const messages = await this.buildMessages(resolvedSystemInput);
-
-
-    //     let newOptions = { ...this.options, ...this.model.parameters, ...options }
-
-    //     const rawResponse = await this.ollama.chat(
-    //         this.model.model_name,
-    //         messages,
-    //         { ...newOptions, num_predict: newOptions.num_ctx }
-    //     );
-
-
-    //     let response = await this.processResponse(rawResponse)
-
-
-    //     userMessage.confidence_score = response._confidence;
-    //     // userMessage.is_training_candidate = response._confidence >= this.model.min_fine_tune_confidence
-    //     userMessage.tokens = rawResponse.prompt_eval_count
-    //     userMessage.save()
-    //     return response;
-    // }
-
-    async buildMessages() {
-
-        const history = await db.Message.findAll({
-            where: {
-                conversation_id: this.conversation.id, role: { [Op.or]: ["assistant", "user"] }
-            },
-            order: [['created_at', 'ASC']],
-            limit: 5, // Last 5 exchanges
-            raw: true
-        });
-
-
-        let messages = history;
-
-
-        let systemPrompt = await this.buildSystemPrompt();
-
-
-
-        return [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-            ...messages.map((m, index) => ({ role: m.role, content: m.content }))
-        ];
-    }
-
-    async buildSystemPrompt() {
-        let systemPrompt = '';
-        if (this.model.system_prompt) {
-            systemPrompt = ModelDeployer.generateSystemInstruction(this.model, this.model.system_prompt)
-        } else {
-            systemPrompt = await ModelDeployer.generateSystemInstruction(this.model, this.model.system_instruction);
-        }
-
-        // if (systemPrompt) {
-        //     resolvedInput = expressionEvaluator.resolveFieldMappings(
-        //         systemPrompt,
-        //         this.context
-        //     );
-        // }
-
-
-        // console.log('resolve prompt', resolvedInput)
-        return systemPrompt;
-    }
-
-    /**
- * Build AI request payload for extracting parameters and filling config.
- * @param {string} userPrompt - The current user's prompt text.
- * @param {object} actionObject - The action object defining config, parameters, etc.
- * @param {Array} history - Array of past conversation messages, each { role, content }.
- * @returns {object} AI request payload ready for API call.
- */
-    async buildAIRequest(userPrompt, actionObject) {
+async buildAIRequest(userPrompt, actionObject) {
         const history = await db.Message.findAll({
             where: {
                 conversation_id: this.conversation.id, role: { [Op.or]: ["assistant", "user"] }, name: {
@@ -467,6 +375,8 @@ ${options.length ? `## FIELD OPTIONS
 
         return newMessages;
     }
+
+
 
 
     async processResponse(data) {

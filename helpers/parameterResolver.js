@@ -315,7 +315,7 @@ export function resolvePlaceholders(str, context) {
 /**
  * Deeply gets nested values
  */
-function getNestedValue(obj, path) {
+export function getNestedValue(obj, path) {
     if (!obj || typeof obj !== 'object') return undefined;
 
     return path.split('.').reduce((acc, part) => {

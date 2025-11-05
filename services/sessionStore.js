@@ -1,4 +1,3 @@
-import { where } from 'sequelize';
 import { db } from '../models/index.js';
 import { internationalizePhoneNumber, sanitizePhoneNumber } from '../helpers/helpers.js';
 import ResourceApiService from './ResourceApiService.js';

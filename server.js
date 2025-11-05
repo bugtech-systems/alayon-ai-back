@@ -24,10 +24,11 @@ import path from 'path';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import SchedulerWorker from './workers/scheduledWorker.js';
 import { validateTenantId } from './middleware/tenantMiddleware.js';
 // Start action worker
 import fs from 'fs';
+import app from "./src/app.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,7 +57,7 @@ try {
 }
 
 
-const app = express();
+// const app = express();
 
 
 const port = process.env.PORT || 3300;
@@ -64,7 +65,7 @@ const staticUrl = process.env.API_STATIC_URL || 'http://localhost:3300/api/v1/st
 
 // Enhanced CORS configuration
 const corsOptions = {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'tenant_id'],
     credentials: true
@@ -123,9 +124,9 @@ app.use('/api-docs',
 );
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy' });
-});
+// app.get('/health', (req, res) => {
+//     res.status(200).json({ status: 'healthy' });
+// });
 
 // Database synchronization with better error handling
 const syncDatabase = async () => {
@@ -640,7 +641,7 @@ const startServer = async () => {
     await syncDatabase();
 
     // ActionWorker.start();
-    SchedulerWorker.init()
+    // SchedulerWorker.init()
 
     app.listen(port, () => {
         console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode`);

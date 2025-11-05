@@ -165,14 +165,12 @@ export const getOrganizationsByNumber = async (num) => {
         raw: true
     });
 
-    console.log(org, 'ORG', num)
     return org;
 };
 
 export const getOrganizationById = async (id) => {
     const org = await ResourceTag.findByPk(id);
 
-    console.log(org, 'ORG', id)
     return org;
 };
 
@@ -275,6 +273,36 @@ export const findActionTemplateByName = async (name, tenantId) => {
     }
 
     return resource.get({ plain: true })
+};
+
+export const findActionTemplates = async (type, tenantId) => {
+    let options = {};
+
+    if (!type) {
+        return null
+    }
+
+    if (type == 'chat') {
+        // If identifier is a number, use it directly as parent ID
+        options = { is_chat_enabled: true, ...(tenantId ? { tenant_id: tenantId } : {}) }
+    } else if (type == 'sms') {
+            options = { is_sms_enabled: true, ...(tenantId ? { tenant_id: tenantId } : {}) }
+    }
+
+
+    let resource = await db.ActionTemplate.findAll({
+        where: options,
+        attributes: ['name', 'description', 'parameters', 'output_as', 'tool_type', 'config'],
+        raw: true
+    }).catch(err => {
+        console.log(err, 'RANGE ERR')
+        return err
+    });
+
+
+  
+
+    return resource
 };
 
 export const getResourceOptions = async (name) => {

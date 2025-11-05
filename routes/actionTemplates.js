@@ -3,12 +3,14 @@ import express from 'express';
 import { db } from '../models/index.js';
 import { ActionEngine } from '../services/ActionEngine.js';
 import { ActionService } from '../services/ActionTriggerService.js';
-import { findActionTemplateByName, getOrganizationById, getOrganizationsByNumber } from '../services/ResourceService.js';
+import { findActionTemplateByName, findActionTemplates, getOrganizationById, getOrganizationsByNumber } from '../services/ResourceService.js';
 import { AIAgent } from '../services/aiAgent.js';
 import { sessionManager } from '../services/sessionStore.js';
 import { chatExecute } from '../controllers/actionController.js';
-import { sanitizePhoneNumber } from '../helpers/helpers.js';
-import { sendSMS, sendSpeak } from '../services/communicationService.js';
+import { removeNullKeys, sanitizePhoneNumber } from '../helpers/helpers.js';
+import contextManager from "../services/contextManager1.js";
+import { AIService  } from '../services/aiService.js';
+import { sendSpeak } from '../services/communicationService.js';
 
 
 
@@ -20,12 +22,20 @@ const router = express.Router();
 // Create a new action template
 router.post('/', async (req, res, next) => {
     try {
+    
+    
+    
         const template = await db.ActionTemplate.create({
             ...req.body,
             ...(req.tenantId ? { tenant_id: req.tenantId } : {})
         });
+        
+        
+        
+        
         res.status(201).json(template);
     } catch (error) {
+    console.log(error, 'ERROR')
         res.status(400).json({ error: error.message });
     }
 });
@@ -37,6 +47,7 @@ router.post('/:templateId/execute', async (req, res) => {
 
         // 1. Fetch template
         const template = await findActionTemplateByName(req.params.templateId);
+        
         if (!template) {
             return res.status(400).json({ message: "Template doesn't exist." });
         }
@@ -165,6 +176,9 @@ router.post('/:templateId/execute', async (req, res) => {
             result = await actionEngine.execute(template, parameters);
         }
 
+
+
+
         res.status(200).json({
             status: 200,
             ...result
@@ -178,7 +192,6 @@ router.post('/:templateId/execute', async (req, res) => {
         });
     }
 });
-
 
 router.post('/:templateId/chat', async (req, res) => {
     const { conversation_id, message } = req.body;
@@ -323,363 +336,312 @@ router.post('/:templateId/chat', async (req, res) => {
 });
 
 router.post('/chat', async (req, res) => {
-    console.log(req.body, 'REQ BOY')
 
-    const { conversation_id, message, speak, attachments } = req.body;
+  try {
+    const { conversation_id, message} = req.body;
+    // Ensure session exists
+    // let session = await sessionManager.getSession(conversation_id);
+    let session = await contextManager.getSession(conversation_id);
 
 
-    let session = await sessionManager.getSession(conversation_id);
-    // let session = sessionManager.getSession('session_420230');
+    // console.log(session, 'SESSION CONTEXT', req.tenantId)
+
+    // Get org context
+    const org = await getOrganizationById(req.tenantId);
+
+    // Step 1: Select action template
+    const selectorTemplate = await findActionTemplates('chat', org?.id);
+    
+    
+    
+    
+                 
+                 
+                 const actionAi = await new AIService(session.id, `action_selector_${org.id}`).init();
+
+                    
+
+                    let actionResponse = await actionAi.generateAction(message, {action_templates: selectorTemplate, last_action: session.context.last_action  });
+
+      
+      
+
+    // Step 2: Execute selected template
+    const execTemplate = await findActionTemplateByName(actionResponse.selected_template, org?.id);
+    console.log('Step 2: Execute selected template', execTemplate)
 
 
-    try {
+    
+    
+    
+    const execResult = await chatExecute({
+      message: `${actionResponse.refined_prompt} (Refined from: ${message})`,
+      sessionId: session.id,
+      template: execTemplate,
+      action: actionResponse,
+      tenant_id: org?.id
+    });
+    
+    
+    let response;
+    
+    
+    
+    
+        if(!execResult.message){
 
-        if (!session) {
-            console.log('[Session] Creating new session');
-            session = await sessionManager.createSession(conversation_id);
+             const ai = await new AIService(session.id, `alayon_model_${org.id}`).init();
+                response = await ai.query(message, {context: execResult  });
+                
         } else {
-            console.log(`[Session] Using existing session: ${session.id}`);
+            response = execResult;
         }
 
 
 
-        let org = await getOrganizationById(req.tenantId);
+
+    // Step 3: Generate AI response
+    // const agent = new AIAgent(`alayon_model_${org?.id}`, session.conversation_id);
+    // await agent.initialize(session, org?.id);
+    // const alayonResult = await agent.generateAlayon(message, execResult);
 
 
-
-
-
-
-        //  if (resultSubscription.context && resultSubscription.context.outputs.main.scenario == 'unsubscribe') {
-        //                 await sessionManager.handleUpdateMobile(sender, {}, false)
-        //             }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        let template = await findActionTemplateByName(`action_selector`, org?.id);
-
-
-
-
-        let result = await actionEngine.execute(template, {
-            message: message
-        });
-
-
-
-
-        let executeTemplate = await findActionTemplateByName(result.data.selected_template, org?.id);
-
-        console.log(executeTemplate, 'temp', org?.id, result.data.selected_template)
-
-        let executeResult = await chatExecute({
-            message,
-            sessionId: session.id,
-            template: executeTemplate,
-            action: result.data,
-            tenant_id: org?.id
-        })
-
-
-
-
-        console.log(result, 'EXECUTE RESULTS', executeResult)
-
-
-        const agent = new AIAgent(`alayon_model_${org?.id}`, session.conversation_id);
-
-        await agent.initialize(session, org?.id);
-        let alayonResult = await agent.generateAlayon(message, executeResult)
-
-
-
-
-        sessionManager.updateSession(session.id, session);
-        console.log(executeResult, alayonResult, 'CHAT MESSAGE', speak)
-        let aiMessage = executeResult?.message || alayonResult?.message;
-        let execRec = executeResult?.recipients || [];
-        let alayonRec = alayonResult?.recipients || [];
-        let recipients = [...execRec, ...alayonRec];
-
-
-        if (speak || result.data?.post_hook_type?.includes('SPEAK')) {
-            await sendSpeak({ message: aiMessage });
-        }
-
-        if (result.data?.post_hook_type && result.data?.post_hook_type.length) {
-
-
-
-            await sendSMS({ message_types: result.data.post_hook_type, recipients, message: aiMessage })
-        }
-
-        return res.status(200).json({ message: aiMessage, result: { executeResult, alayonResult } });
-
-    } catch (error) {
-        console.log(error, 'ERRR')
-        // console.log(error, "ERRORrr")
-        res.status(400).json({
-            error: error?.message,
-            details: error?.details
-        });
+    if(req.body.speak){
+        sendSpeak(response)
     }
+
+ 
+     let context = await contextManager.addContext(session.id, {last_action: actionResponse});
+
+ 
+ 
+    return res.status(200).json({
+      message: response.message,  
+      data: { ...response },
+      context: context,
+      sessionId: session.id,
+      success: true
+    //   result: a
+    });
+  } catch (error) {
+    console.error(error, 'CHAT ERROR');
+    res.status(400).json({ success: false, details: error?.details });
+  }
 });
 
 router.post('/sms', async (req, res) => {
+  try {
     const { sender, message, system } = req.body;
+    const convId = sanitizePhoneNumber(sender);
 
-    let session = await sessionManager.getSession(sanitizePhoneNumber(sender));
-    // let session = sessionManager.getSession('session_420230');
+    // Ensure session exists
+    let session = await contextManager.getSession(convId);
 
 
-    try {
-
-        if (!session) {
-            console.log('[Session] Creating new session');
-            session = await sessionManager.createSession(sanitizePhoneNumber(sender));
-        } else {
-            console.log(`[Session] Using existing session: ${session.id}`);
-        }
-
-        if (sanitizePhoneNumber(sender) == sanitizePhoneNumber(system)) {
-            console.log('SAME SENDER')
-            return res.status(200).json({ message: 'Sender reciever cannot be the same.' })
-        }
-
-
-
-        let org = await getOrganizationsByNumber(sanitizePhoneNumber(system));
-
-
-        let user = await sessionManager.handleMobileSubscription(sender, org?.id);
-
-
-        let subscriptionTemplate = await findActionTemplateByName('check_subscription', org?.id);
-
-
-
-        session.tenant_id = org?.id;
-        session.status = !user.attributes.isSubscribe ? 'Not yet subscribe' : session.status;
-
-
-        let resultSubscription = await actionEngine.execute(subscriptionTemplate, {
-            message:
-                `##USER CONTEXT: 
-                ${JSON.stringify(user.attributes, null, 2)}\n\n
-                
-                ##CURRENT SCENARIO: 
-                ${session.status}\n\n
-                
-            ##USER PROMPT: ${message}`
-        });
-
-
-
-
-
-
-
-
-
-        console.log('USER SUBSCRIBE', resultSubscription)
-
-
-        if (!user.attributes.isSubscribe) {
-            let smsAction = await findActionTemplateByName('send_sms', org?.id);
-
-            if (resultSubscription.context.outputs.main.scenario == 'subscription_onboarding') {
-                await sessionManager.handleUpdateMobile(user.id, resultSubscription.context.outputs.main, true)
-                await actionEngine.execute(smsAction, {
-                    message: resultSubscription?.data.message,
-                    recipients: [sender],
-                    message_types: ['FLASH']
-                });
-
-            }
-
-            console.log(resultSubscription, 'RESULT SUBSCRIPTION')
-
-            await actionEngine.execute(smsAction, {
-                message: resultSubscription?.data.message,
-                recipients: [sender],
-            });
-
-
-            session.status = resultSubscription.context.outputs.main.scenario;
-
-            sessionManager.updateSession(session.id, session);
-            return res.status(200).json(resultSubscription?.data);
-
-
-        } else {
-
-
-
-
-
-
-
-
-
-
-
-            //  if (resultSubscription.context && resultSubscription.context.outputs.main.scenario == 'unsubscribe') {
-            //                 await sessionManager.handleUpdateMobile(sender, {}, false)
-            //             }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            let template = await findActionTemplateByName('action_selector', org?.id);
-
-
-
-            console.log(template, 'SELECT ACTION')
-            let result = await actionEngine.execute(template, {
-                message: message
-            });
-
-
-
-
-            let executeResult;
-
-            if (result.data.selected_template != 'check_subscription') {
-
-
-                let executeTemplate = await findActionTemplateByName(result.data.selected_template, org?.id);
-
-
-
-                executeResult = await chatExecute({
-                    message,
-                    sessionId: session.id,
-                    template: executeTemplate,
-                    action: result.data,
-                    tenant_id: org?.id
-                })
-
-                console.log('TEMPLATE ACTION SELECTED', result.data, executeTemplate, executeResult)
-
-
-            } else {
-
-                executeResult = await actionEngine.execute(subscriptionTemplate, {
-                    message:
-                        `##USER CONTEXT: 
-                ${JSON.stringify(user.attributes, null, 2)}\n\n
-                
-                ##CURRENT SCENARIO: 
-                ${session.status}\n\n
-            ##USER PROMPT: ${message}`
-                });
-                session.status = executeResult.context.outputs.main.scenario;
-                console.log(executeResult, 'exec')
-                if (session.status == "unsubscribe") {
-                    await sessionManager.handleUpdateMobile(user.id, resultSubscription.context.outputs.main, false)
-                }
-                sessionManager.updateSession(session.id, session);
-            }
-
-
-
-            let alayonResult;
-            console.log(executeResult, 'EXECUTE RESULTS', result.data.selected_template)
-            if (result.data.selected_template == `alayon_waters_assistant_${org.id}`) {
-                alayonResult = executeResult;
-            } else if (result.data.selected_template == 'check_subscription') {
-                alayonResult = executeResult.data;
-            } else {
-                const agent = new AIAgent(`alayon_model_${org?.id}`, session.conversation_id);
-                await agent.initialize(session, org?.id);
-                alayonResult = await agent.generateAlayon(message, executeResult)
-            }
-
-
-
-            console.log(alayonResult, 'EXECUTE ALAYOn RESULTS', result, executeResult)
-
-
-
-            let hooks = result.data.post_hook_type ? result.data.post_hook_type : []
-
-            let smsAction = await findActionTemplateByName(`send_sms`, org?.id);
-
-
-            sessionManager.updateSession(session.id, session);
-
-            let recipients = executeResult.recipients ? executeResult.recipients : alayonResult.recipients ? alayonResult.recipients : []
-            console.log(recipients, 'EXECUTE ALAYOn Recip')
-
-            if (result.data.trigger_type !== 'IMMEDIATE') {
-                const trigger = await db.ActionTrigger.create({
-                    trigger_config: result.data.trigger_config,
-                    trigger_type: result.data.trigger_type,
-                    action_template_id: smsAction.id,
-                    tool_type: smsAction.tool_type,
-                    parameters: {
-                        message: executeResult.message || alayonResult.message,
-                        recipients: [sender, ...recipients],
-                        message_types: ['SMS', ...hooks]
-                    }
-                });
-
-
-
-                await ActionService.scheduleTrigger(trigger);
-                return res.status(200).json({
-                    result: executeResult,
-                    message: `${smsAction.trigger_type} Action Executed!`
-                })
-            } else {
-                // this.executeImmediately(trigger);
-                await actionEngine.execute(smsAction, {
-                    message: executeResult.message || alayonResult.message,
-                    recipients: [...recipients, sender],
-                    message_types: ['SMS', ...hooks]
-                });
-
-                return res.status(200).json({ execute: executeResult, message: alayonResult });
-
-            }
-
-        }
-
-    } catch (error) {
-        console.log(error, 'ERRR')
-        // console.log(error, "ERRORrr")
-        res.status(400).json({
-            error: error?.message,
-            details: error?.details
-        });
+    if (sanitizePhoneNumber(sender) === sanitizePhoneNumber(system)) {
+      return res.status(200).json({ message: 'Sender and receiver cannot be the same.' });
     }
+
+    // Get org + user context
+    const org = await getOrganizationsByNumber(sanitizePhoneNumber(system));
+    const user = await contextManager.handleMobileSubscription(sender, org?.id);
+
+    const subscriptionTemplate = await findActionTemplateByName('check_subscription', org?.id);
+
+    session.tenant_id = org?.id;
+    if (user.attributes.isSubscribe == false) session.status = 'Not yet subscribe';
+
+
+
+
+
+
+    session.user = user.attributes
+
+
+    // Step 1: Run subscription check
+    const subResult = await actionEngine.execute(subscriptionTemplate, {
+      message: `##USER CONTEXT: ${JSON.stringify(session.user, null, 2)}\n\n` +
+               `##LAST SCENARIO: ${session.status}\n\n` +
+               `##USER PROMPT: ${message}`
+    });
+
+
+    session.user = {...session.user,  ...removeNullKeys(subResult.data.user)}
+
+    await contextManager.handleUpdateMobile(user.id, session.user, session.user.isSubscribe);
+
+
+
+
+    // Step 2: Handle unsubscribed users
+    if (user.attributes.isSubscribe == false) {
+      const smsAction = await findActionTemplateByName('send_sms', org?.id);
+
+      if (subResult.data.scenario === 'confirm_subscription') {
+        await contextManager.handleUpdateMobile(user.id, session.user, true);
+        await actionEngine.execute(smsAction, {
+          message: subResult?.data.message,
+          recipients: [sender],
+          message_types: ['FLASH']
+        });
+                    session.status = 'followup';
+      } else {
+            session.status = subResult.data.scenario;
+      }
+
+      await actionEngine.execute(smsAction, {
+        message: subResult?.data.message,
+        recipients: [sender]
+      });
+
+
+    //   session.status = subResult.data.scenario;
+    session = await contextManager.addSessionState(session.id, session);
+      return res.status(200).json(subResult?.data);
+    }
+
+    // Step 3: Handle subscribed users → Action Selection
+    const selectorTemplate = await findActionTemplateByName('action_selector', org?.id);
+    const actionResponse = await actionEngine.execute(selectorTemplate, { message:  `##CONTEXT: ${JSON.stringify(session, null, 2)}\n\n` +
+               `##LAST SCENARIO: ${session.status}\n\n` +
+               `##USER PROMPT: ${message}` });
+  /*      const selectorTemplate = await findActionTemplateByName('Find Action Templates', org?.id);
+    
+    
+    const selection = await actionEngine.execute(selectorTemplate, { tenantId: org.id});
+    
+                 
+                 
+                 
+                 const actionAi = await new AIService(session.id, `action_selector_${org.id}`).init();
+
+                    
+
+                    let actionResponse = await actionAi.generateAction(message, {action_templates: selection.data, last_action: session.context.last_action  });
+
+     */
+    
+    
+    let execResult;
+    
+    
+    if (actionResponse.data.selected_template !== 'check_subscription') {
+      const execTemplate = await findActionTemplateByName(actionResponse.data.selected_template, org?.id);
+      
+      execResult = await chatExecute({
+        message: 
+         `##USER CONTEXT: ${JSON.stringify(session, null, 2)}\n\n` +
+               `##LAST SCENARIO: ${session.status}\n\n` +
+               `##USER PROMPT: ${actionResponse.data.refined_prompt} (Refined from: ${message})`,
+        sessionId: session.id,
+        template: execTemplate,
+        action: actionResponse.data,
+        tenant_id: org?.id
+      });
+            session.status = actionResponse.data.selected_template;
+    } else {
+    
+      execResult = await actionEngine.execute(subscriptionTemplate, {
+        message: `##USER CONTEXT: ${JSON.stringify(session.user, null, 2)}\n\n` +
+                 `##LAST SCENARIO: ${session.status}\n\n` +
+                 `##USER PROMPT: ${message}`
+      });
+      session.status = execResult.data.scenario;
+      
+      
+
+      if (session.status === 'confirm_unsubscribe') {
+      console.log('UNSUBSCRIBING!!')
+        await contextManager.handleUpdateMobile(user.id, session.user, false);
+      }
+    }
+
+      await contextManager.addSessionState(session.id, session);
+
+
+    // Step 4: AI response if needed
+    let alayonResult;
+  if (actionResponse.data.selected_template === 'check_subscription') {
+      alayonResult = execResult.data;
+
+    } else {
+    
+        if(!execResult.message){
+
+             const ai = await new AIService(session.id, `alayon_model_${org.id}`).init();
+                alayonResult = await ai.query(message, {context: execResult  });
+        } else {
+            alayonResult = execResult;
+        }
+    }
+
+
+
+
+
+    // Step 5: Post-hooks
+    const smsAction = await findActionTemplateByName('send_sms', org?.id);
+    const recipients =  alayonResult?.recipients || execResult?.recipients  || [];
+    const hooks = actionResponse.data.post_hook_type || [];
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    await contextManager.addSessionState(session.id, session);
+
+    if (actionResponse.data.trigger_type !== 'IMMEDIATE') {
+      const trigger = await db.ActionTrigger.create({
+        trigger_config: actionResponse.data.trigger_config,
+        trigger_type: actionResponse.data.trigger_type,
+        action_template_id: smsAction.id,
+        tool_type: smsAction.tool_type,
+        parameters: {
+          message: alayonResult.message || execResult.message,
+          recipients: [sender, ...removeNullKeys(recipients)],
+          message_types: ['FLASH', ...hooks]
+        }
+      });
+      await ActionService.scheduleTrigger(trigger);
+      return res.status(200).json({
+        result: execResult,
+        message: `${smsAction.trigger_type} Action Scheduled!`
+      });
+    } else {
+      await actionEngine.execute(smsAction, {
+        message: alayonResult.message || execResult.message,
+        recipients: [...removeNullKeys(recipients), sender],
+        message_types: ['FLASH', ...hooks]
+      });
+      
+      
+      
+      return res.status(200).json(alayonResult);
+    }
+  } catch (error) {
+    console.error(error, 'SMS ERROR');
+    res.status(400).json({ error: error?.message, details: error?.details });
+  }
 });
 
 // Get all action templates

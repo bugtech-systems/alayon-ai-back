@@ -14,6 +14,9 @@ const sequelize = new Sequelize(
         logging: false,
         define: {
             operatorsAliases: Sequelize.Op
+        },
+         dialectOptions: {
+                    ssl: { require: true, rejectUnauthorized: false }
         }
     }
 );
@@ -31,15 +34,15 @@ const modelInitializers = [
     { name: 'ResourceField', init: (await import('./resourceField.model.js')).default },
     { name: 'ResourceRelationship', init: (await import('./resourceRelationship.model.js')).default },
     { name: 'ActionTemplate', init: (await import('./actionTemplate.model.js')).default },
-    { name: 'TemplateExecutionResult', init: (await import('./templateExecutionResult.model.js')).default },
+    // { name: 'TemplateExecutionResult', init: (await import('./templateExecutionResult.model.js')).default },
     { name: 'Conversation', init: (await import('./conversation.model.js')).default },
     { name: 'ActionTrigger', init: (await import('./actionTrigger.model.js')).default },
     { name: 'AuditLog', init: (await import('./auditLog.model.js')).default },
     { name: 'Message', init: (await import('./message.model.js')).default },
-    { name: 'Rating', init: (await import('./rating.model.js')).default },
-    { name: 'Label', init: (await import('./label.model.js')).default },
-    { name: 'TrainingSample', init: (await import('./trainingSample.js')).default },
-    { name: 'EmbeddingCache', init: (await import('./embeddingCache.model.js')).default },
+    // { name: 'Rating', init: (await import('./rating.model.js')).default },
+    // { name: 'Label', init: (await import('./label.model.js')).default },
+    // { name: 'TrainingSample', init: (await import('./trainingSample.js')).default },
+    // { name: 'EmbeddingCache', init: (await import('./embeddingCache.model.js')).default },
     { name: 'AiPreset', init: (await import('./aiPreset.model.js')).default }
 
 
@@ -139,6 +142,11 @@ function defineAssociations() {
         as: 'tenant'
     });
 
+    db.Message.belongsTo(db.ResourceTag, {
+        foreignKey: 'tenant_id',
+        as: 'tenant'
+    });
+
     db.AiPreset.belongsTo(db.ResourceTag, {
         foreignKey: 'tenant_id',
         as: 'tenant'
@@ -197,9 +205,9 @@ function defineAssociations() {
     // });
 
 
-    db.TemplateExecutionResult.belongsTo(db.ActionTemplate, {
+   /*  db.TemplateExecutionResult.belongsTo(db.ActionTemplate, {
         foreignKey: 'template_id'
-    });
+    }); */
 
 
     db.ActionTemplate.hasMany(db.ActionTrigger, { foreignKey: 'action_template_id' });
@@ -213,25 +221,11 @@ function defineAssociations() {
 
 
 
-    // Define associations
-    db.Conversation.hasMany(db.Message, { foreignKey: 'conversation_id' });
-    db.Message.belongsTo(db.Conversation, { foreignKey: 'conversation_id' });
+    // // Define associations
+    // db.Conversation.hasMany(db.Message, { foreignKey: 'conversation_id' });
+    // db.Message.belongsTo(db.Conversation, { foreignKey: 'conversation_id' });
 
-    db.Message.hasOne(db.Rating, { foreignKey: 'message_id' });
-    db.Rating.belongsTo(db.Message, { foreignKey: 'message_id' });
 
-    db.TrainingSample.belongsTo(db.Message, { foreignKey: 'message_id' });
-    db.Message.hasOne(db.TrainingSample, { foreignKey: 'message_id' });
-
-    // Many-to-Many: TrainingSamples can have multiple Labels
-    db.TrainingSample.belongsToMany(db.Label, {
-        through: 'TrainingSampleLabels',
-        foreignKey: 'training_sample_id'
-    });
-    db.Label.belongsToMany(db.TrainingSample, {
-        through: 'TrainingSampleLabels',
-        foreignKey: 'label_id'
-    });
 
 
 
@@ -248,9 +242,9 @@ async function initializeDatabase() {
 
         if (process.env.NODE_ENV === 'development') {
             await sequelize.sync({
-                alter: true,
+                // alter: true,
                 // force: true
-            });
+            });  
             console.log('Database synchronized with alter');
         }
 

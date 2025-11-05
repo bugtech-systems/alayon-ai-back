@@ -1,10 +1,7 @@
 // services/ollamaService.js
 import { Ollama } from 'ollama';
 import { findActionTemplateByName, getFieldsForResource, getResourcesByType, getResourceTypes } from "./ResourceService.js";
-import { getActionTemplates } from "./ActionTemplateService.js";
 import { db } from '../models/index.js';
-import { formatConversation, getConversationMessages, logMessage } from './aiService.js';
-import { default_schema } from '../configs/default_models.js';
 import { AIAgent } from '../tuner/app/ai-agent.js';
 
 // Initialize Ollama client with your server configuration
@@ -98,7 +95,6 @@ export async function generateQueryWithConfig(prompt, session) {
     };
 
 
-    console.log(prompt, context, 'configwssith', await buildPrompt(prompt, context))
 
     const response = await ollama.generate({
         model: 'mistral:7b',
@@ -193,7 +189,6 @@ export async function processActionPrompt(message, session) {
 
 
 
-    console.log(aiPreset.id, 'ai action preset', session.id, aiPreset.id)
     let conversation = await db.Conversation.findOne({
         where: { session_id: session.id, ai_preset_id: aiPreset.id }
     })

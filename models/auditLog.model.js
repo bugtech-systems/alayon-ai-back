@@ -29,6 +29,9 @@ export default ({ sequelize }, DataTypes) => {
     }, {
         tableName: 'audit_logs',
         timestamps: true,
+         timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
         indexes: [
             { fields: ['action_template_id'] },
             { fields: ['status'] },

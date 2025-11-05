@@ -11,7 +11,6 @@ let system = '639368263352';
 export async function sendSMS(config) {
     let { message_types, recipients, message } = config;
 
-    console.log('Message config', config)
 
     if (recipients.length) {
         recipients = recipients.map(a => String(a))
@@ -34,8 +33,6 @@ export async function sendSMS(config) {
 
                 }
             });
-            console.log('Sms Message', response.data)
-
         }
 
         if (isFlash) {
@@ -50,7 +47,6 @@ export async function sendSMS(config) {
                     system: system
                 }
             });
-            console.log('FLash Message', response.data)
         }
 
         if (isCall) {
@@ -70,12 +66,10 @@ export async function sendSMS(config) {
                         }
                     }
                 });
-                console.log('Call Message', response.data)
             }
         }
 
 
-        console.log(messages, 'MESSAGES', config)
         return { message: 'Recipients SMS Processed', messages };
 
     } else {

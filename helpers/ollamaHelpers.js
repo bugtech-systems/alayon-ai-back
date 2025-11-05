@@ -152,7 +152,6 @@ export async function processMessage(userInput, conversation) {
         format: 'json'
     });
 
-    // console.log(promptMessages, 'PROMPT', response)
 
     let chat = await db.Conversation.create({
         title: currentModel,
@@ -310,7 +309,6 @@ export async function processMessage(userInput, conversation) {
                 }
             }
         }
-        console.log(result, 'RES')
         if (result.type == 'create_relationship') {
 
 

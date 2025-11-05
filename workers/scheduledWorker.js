@@ -1,5 +1,4 @@
 import { scheduleJob, scheduledJobs, cancelJob } from 'node-schedule';
-import { ActionService } from '../services/ActionTriggerService.js';
 import { db } from '../models/index.js';
 import { Op } from 'sequelize';
 import { ActionEngine } from '../services/ActionEngine.js';

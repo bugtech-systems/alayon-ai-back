@@ -235,8 +235,8 @@ class ResourceService {
             const targetExists = await this.ResourceTag.findOne({
                 where: {
                     id: rel.target_resource_id,
-                    is_deleted: false
-                    // tenant_id: tenant_id
+                    is_deleted: false,
+                    tenant_id: tenant_id
                 },
                 options
             });
@@ -248,7 +248,7 @@ class ResourceService {
                 source_resource_id: sourceResourceId,
                 target_resource_id: rel.target_resource_id,
                 relationship_name: rel.relationship_name || rel.relationship_type,
-                // tenant_id: tenant_id,
+                tenant_id: tenant_id,
                 attributes: rel.attributes || null,
                 start_at: rel.start_at || null,
                 end_at: rel.end_at || null,
@@ -406,7 +406,6 @@ class ResourceService {
                     },
                     attributes: ['id']
                 });
-                console.log('PARENT', parentResource)
                 if (!parentResource) return [];
                 parentId = parentResource.id;
             }

@@ -38,6 +38,33 @@ export class OllamaClient {
             throw new Error(`Ollama API error: ${error.response?.data?.error || error.message}`);
         }
     }
+    
+    
+        async generate(model, prompt, options) {
+        try {
+            const response = await this.client.post('/generate', {
+                model,
+                prompt,
+                options: {
+                    num_predict: 512,
+                    top_k: 40,
+                    top_p: 0.9,
+                    ...options
+                },
+                format: 'json',
+                stream: false
+            });
+
+
+
+
+            return response.data;
+        } catch (error) {
+
+            console.log(error, 'ERROR')
+            throw new Error(`Ollama API error: ${error.response?.data?.error || error.message}`);
+        }
+    }
 
     async createModel(modelName, modelfile) {
         const response = await this.client.post('/create', {

@@ -10,6 +10,9 @@ import { ActionEngine } from '../services/ActionEngine.js';
 import { ActionService } from '../services/ActionTriggerService.js';
 import { AIAgent } from '../services/aiAgent.js';
 import { Op } from 'sequelize';
+import contextManager from "../src/services/contextManager.js";
+import { AIService  } from '../src/services/aiService.js';
+import { getOrganizationById } from '../services/ResourceService.js';
 
 const actionEngine = new ActionEngine();
 
@@ -136,7 +139,6 @@ router.post('/detect-action', async (req, res) => {
         // Step 1: Build the Ollama prompt
         const actionPrompt = aiService.buildOllamaPrompt(actionTemplates.map(a => { return { name: a.name, description: a.description, action: a.action_type, resource: a.target_resource_type.name } }), message)
 
-        console.log(actionPrompt, 'ACTION PROMPT')
 
         const ollamaResponse = await aiService.callOllama(actionPrompt);
 
@@ -250,7 +252,7 @@ router.post('/preset/:id', async (req, res) => {
     const modelId = req.params.id;
     const { message, conversation_id, options } = req.body;
 
-    let session = await sessionManager.getSession(conversation_id);
+    let session = await contextManager.getSession(conversation_id);
 
 
 
@@ -258,16 +260,18 @@ router.post('/preset/:id', async (req, res) => {
 
         if (!session) {
             console.log('[Session] Creating new session');
-            session = await sessionManager.createSession(conversation_id);
 
         } else {
             console.log(`[Session] Using existing session: ${session.id}`);
         }
 
+        const org = await getOrganizationById(req.tenantId);
 
 
         session.ai_preset_id = modelId;
-        sessionManager.updateSession(session.id, session)
+        
+        
+        // sessionManager.updateSession(session.id, session)
 
 
 
@@ -275,12 +279,18 @@ router.post('/preset/:id', async (req, res) => {
         console.log(session, 'SESSH', modelId)
 
 
-        const agent = new AIAgent(session.ai_preset_id, session.conversation_id);
 
-        await agent.initialize(session.context);
+
+             const ai = await new AIService(session.id, session.ai_preset_id).init();
+             console.log(session, 'SESSS')
+           let response = await ai.query(message, {useAI: true  });
+
+        // const agent = new AIAgent(session.ai_preset_id, session.conversation_id);
+
+        // await agent.initialize(session.context);
 
         console.log('[MESSAGE] Processing user input...');
-        const response = await agent.generate(message, options);
+        // const response = await agent.generate(message, options);
 
 
         console.log('[AI MESSAGE] response...', response);
@@ -308,7 +318,7 @@ router.get('/train/:id', async (req, res) => {
             return res.status(400).json({ error: "Missing message id." });
         }
 
-        const message = await db.Message.findAll({ where: { treadId: messageId } });
+        const message = await db.Message.findAll({ where: { tread_id: messageId } });
 
         if (message.length < 2) {
             return res.status(404).json({
@@ -320,7 +330,7 @@ router.get('/train/:id', async (req, res) => {
 
 
         const trained = await db.Message.update({ is_training_candidate: !message[0].is_training_candidate }, {
-            where: { treadId: messageId }
+            where: { tread_id: messageId }
         });
 
 
@@ -373,7 +383,7 @@ router.get('/preset/:id', async (req, res) => {
 
 
 
-        const { page = 1, limit = 20, sort = 'DESC' } = req.query;
+        const { page = 1, limit = 100, sort = 'DESC' } = req.query;
         const offset = (page - 1) * limit;
 
         const result = await db.Message.findAndCountAll({

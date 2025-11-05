@@ -140,6 +140,8 @@ router.post('/', async (req, res) => {
             transaction
         );
 
+
+
         await transaction.commit();
         return res.status(201).json(formatResourceResponse(resource, relationship));
     } catch (error) {

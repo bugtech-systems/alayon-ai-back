@@ -48,7 +48,7 @@ async function refineTextForSpeech(text, aiModel) {
             prompt: systemPrompt,
             stream: false,
             options: {
-                temperature: 0.1,     // Lower = more deterministic
+                temperature: 0.3,     // Lower = more deterministic
                 num_ctx: 4096      // Better context understanding
             }
         }),

@@ -8,12 +8,15 @@ export default ({ sequelize }, DataTypes) => {
         name: {
             type: DataTypes.STRING(255),
             allowNull: false,
-            unique: true
+            unique: false
         },
         description: {
             type: DataTypes.TEXT
         },
         output_as: {
+            type: DataTypes.STRING(255),
+        },
+        context_as: {
             type: DataTypes.STRING(255),
         },
         tool_type: {
@@ -22,15 +25,23 @@ export default ({ sequelize }, DataTypes) => {
                 'EMAIL',
                 'API_CALL',
                 'AI_ACTION',
-                'DB_QUERY',
+                'DB_OPERATION',
                 'SCRIPT',
                 'COMPOSITE',
                 'SPEAK'
             ),
             allowNull: true,
-            defaultValue: "DB_QUERY"
+            defaultValue: "DB_OPERATION"
         },
         config: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },
+        output_template: {
+            type: DataTypes.JSONB,
+            defaultValue: {}
+        },        
+        context_template: {
             type: DataTypes.JSONB,
             defaultValue: {}
         },
@@ -58,12 +69,26 @@ export default ({ sequelize }, DataTypes) => {
         post_hooks: {
             type: DataTypes.JSONB
         },
+        success_hooks: {
+            type: DataTypes.JSONB
+        },
+        error_hooks: {
+            type: DataTypes.JSONB
+        },
         parameters: {
             type: DataTypes.JSONB
         },
         is_chat_enabled: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+        is_sms_enabled: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        is_default: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         },
         ai_example_queries: {
             type: DataTypes.JSONB,

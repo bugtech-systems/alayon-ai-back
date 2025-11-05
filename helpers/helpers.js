@@ -3,10 +3,23 @@ import { findResourceByName, getOrganizations, getResourcesByType, getResourceTy
 
 
 export function removeNullKeys(obj) {
+  if (Array.isArray(obj)) {
+    // Process array recursively
+    return obj
+      .map(item => removeNullKeys(item))
+      .filter(item => !(item == null || item === 'undefined'));
+  } else if (obj !== null && typeof obj === 'object') {
+    // Process object recursively
     return Object.fromEntries(
-        Object.entries(obj).filter(([_, value]) => !(value == null || value == 'undefined'))
+      Object.entries(obj)
+        .filter(([_, value]) => !(value == null || value === 'undefined'))
+        .map(([key, value]) => [key, removeNullKeys(value)])
     );
+  }
+  // Return primitive values as-is
+  return obj;
 }
+
 
 
 // Detect CRUD action from prompt
@@ -589,7 +602,7 @@ function getNestedValue(obj, pathParts) {
 }
 
 function formatToTenDigits(str) {
-    if (!str || typeof str !== 'string') return '9000000000'; // default fallback
+    if (!str || typeof str !== 'string') return `Invalid:${str}`; // default fallback
 
     if (str[0] !== '9') str = '9' + str;
     while (str.length < 10) {
@@ -605,7 +618,6 @@ export function sanitizePhoneNumber(phoneNumber) {
 
     if (sanitized.length > 12) throw Error('Invalid phone number format');
 
-
     // Check for common prefixes and remove them
     if (sanitized.startsWith('09')) {
         return sanitized.slice(1); // Remove the '09' prefix
@@ -618,14 +630,13 @@ export function sanitizePhoneNumber(phoneNumber) {
     } else {
         return formatToTenDigits(sanitized)
     }
-
     // If the number is not in a valid format, return null or throw an error
 }
 
 
-export function internationalizePhoneNumber(phoneNumber) {
+export function internationalizePhoneNumber(phoneNumber = '') {
     // Remove any non-numeric characters from the phone number
-    const sanitized = phoneNumber.replace(/\D/g, '');
+    const sanitized = String(phoneNumber).replace(/\D/g, '');
 
     if (sanitized.length > 12) throw Error('Invalid phone number format');
 

@@ -21,13 +21,13 @@ export default ({ sequelize }, DataTypes) => {
                 'EMAIL',
                 'API_CALL',
                 'AI_ACTION',
-                'DB_QUERY',
+                'DB_OPERATION',
                 'SCRIPT',
                 'COMPOSITE',
                 'SPEAK'
             ),
             allowNull: true,
-            defaultValue: "DB_QUERY"
+            defaultValue: "DB_OPERATION"
         },
         trigger_config: {
             type: DataTypes.JSONB,
@@ -44,7 +44,9 @@ export default ({ sequelize }, DataTypes) => {
         }
     }, {
         tableName: 'action_triggers',
-        timestamps: true
+        timestamps: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at'
     });
 
     ActionTrigger.associate = models => {

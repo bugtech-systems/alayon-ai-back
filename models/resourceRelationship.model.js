@@ -5,7 +5,7 @@ export default ({ sequelize, Op }, DataTypes) => {
     class ResourceRelationship extends Model {
         isCurrentlyActive() {
             const now = new Date();
-            return this.isActive &&
+            return this.is_active &&
                 (!this.start_at || this.start_at <= now) &&
                 (!this.end_at || this.end_at >= now);
         }
@@ -67,7 +67,7 @@ export default ({ sequelize, Op }, DataTypes) => {
                 }
             }
         },
-        isActive: {
+        is_active: {
             type: DataTypes.BOOLEAN,
             defaultValue: true,
             validate: {
@@ -94,7 +94,7 @@ export default ({ sequelize, Op }, DataTypes) => {
                 unique: true,
                 fields: ['source_resource_id', 'target_resource_id', 'relationship_type'],
                 where: {
-                    isActive: true
+                    is_active: true
                 },
                 name: 'unique_active_relationship'
             },
@@ -111,7 +111,7 @@ export default ({ sequelize, Op }, DataTypes) => {
                 name: 'idx_relationship_type'
             },
             {
-                fields: ['isActive'],
+                fields: ['is_active'],
                 name: 'idx_is_active'
             },
             {
@@ -125,14 +125,14 @@ export default ({ sequelize, Op }, DataTypes) => {
         ],
         scopes: {
             active: {
-                where: { isActive: true }
+                where: { is_active: true }
             },
             inactive: {
-                where: { isActive: false }
+                where: { is_active: false }
             },
             current: {
                 where: {
-                    isActive: true,
+                    is_active: true,
                     [Op.or]: [
                         {
                             start_at: null,

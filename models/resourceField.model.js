@@ -80,11 +80,7 @@ export default ({ sequelize }, DataTypes) => {
         createdAt: 'created_at',
         updatedAt: 'updated_at',
         indexes: [
-            {
-                unique: true,
-                fields: ['resource_tag_id', 'field_name'],
-                name: 'resource_fields_unique_name_per_resource'
-            },
+  
             {
                 fields: ['resource_tag_id'],
                 name: 'resource_fields_resource_tag_index'

@@ -4,7 +4,8 @@ import * as expressionEvaluator from './expressionEvaluator.js';
 import axios from 'axios';
 import { findActionTemplateByName } from './ResourceService.js';
 import { AIAgent } from '../services/aiAgent.js';
-import { sessionManager } from '../services/sessionStore.js';
+import { AIService  } from '../services/aiService.js';
+import contextManager from './contextManager1.js';
 
 // Unique ID generator for executions
 const generateExecutionId = () =>
@@ -26,83 +27,125 @@ export class ActionEngine {
      * @param {number|null} triggerId - Associated trigger ID
      * @returns {Promise<object>} Execution result
      */
-    async execute(temp, parameters = {}, triggerId = null) {
-        console.log(temp, parameters, 'TEMPLATE EXECUTE')
+  async execute(temp, parameters = {}, triggerId = null) {
+    const template = await db.ActionTemplate.findByPk(temp?.id);
+    if (!template) throw new Error('Action template not found');
 
-        const template = await db.ActionTemplate.findByPk(temp?.id);
-        if (!template) throw new Error('Action template not found');
+    this.executionId = generateExecutionId();
+    const baseContext = {
+      params: parameters,
+      outputs: {},
+      executionId: this.executionId,
+      ...(parameters.conversation_id ? { conversation_id: parameters.conversation_id } : {}),
+      tenant_id: template.tenant_id
+    };
 
-        // Create execution context
-        this.executionId = generateExecutionId();
-        const baseContext = {
-            params: parameters,
-            outputs: {},
-            executionId: this.executionId,
-            tenant_id: template.tenant_id
-        };
+    const auditLog = await db.AuditLog.create({
+      action_template_id: template.id,
+      action_trigger_id: triggerId,
+      action_type: template.tool_type,
+      status: 'RUNNING',
+      executed_at: new Date(),
+      request_data: { parameters, template: template.get({ plain: true }) },
+      execution_id: this.executionId,
+      context: baseContext
+    });
 
+    try {
+      if (template.pre_hooks) {
+        await this.processHooks(template.pre_hooks, baseContext);
+      }
 
-
-        // Create initial audit log
-        const auditLog = await db.AuditLog.create({
-            action_template_id: template.id,
-            action_trigger_id: triggerId,
-            action_type: template.tool_type,
-            status: 'RUNNING',
-            executed_at: new Date(),
-            request_data: { parameters, template: template.get({ plain: true }) },
-            execution_id: this.executionId,
-            context: baseContext
-        });
-
-
-
-        try {
-            // Process pre-hooks
-            if (template.pre_hooks) {
-                await this.processHooks(template.pre_hooks, baseContext);
-            }
-
-
-            // Execute main action
-            const result = await this.executeAction(temp, baseContext);
-
-            // Store main result
-            baseContext.outputs.main = result;
+      let result = await this.executeAction(template, baseContext);
+      baseContext.outputs = {...baseContext.outputs, [template?.output_as ? template.output_as : "main"]: result};
 
 
 
-            // Process post-hooks
-            if (template.post_hooks) {
-                await this.processHooks(template.post_hooks, baseContext);
-            }
+console.log(result, 'ACTION RESULT')
+      if (template.post_hooks) {
+        await this.processHooks(template.post_hooks, baseContext);
+      }
 
-            // Update audit log
-            await auditLog.update({
-                status: 'COMPLETED',
-                completed_at: new Date(),
-                response_data: result,
-                context: baseContext
-            });
-
-            return { data: result, context: baseContext };
-        } catch (error) {
-            console.log(error, 'err')
-            await auditLog.update({
-                status: 'FAILED',
-                completed_at: new Date(),
-                error_details: error.message
-            });
-            throw error?.response?.data;
-        }
+      await auditLog.update({
+        status: 'COMPLETED',
+        completed_at: new Date(),
+        response_data: result,
+        context: baseContext
+      });
+      
+          // Apply output mapping if defined
+    if (template.output_template && Object.keys(template.output_template).length != 0) {
+      result = await expressionEvaluator.evaluatePlaceholders(template.output_template, {
+        context: baseContext,
+        outputs: baseContext.outputs,
+        result
+      });
     }
+      
+      return {data: result, context: baseContext.outputs};
+    } catch (error) {
+      console.error('[ActionEngine] Error executing action', error);
+      await auditLog.update({
+        status: 'FAILED',
+        completed_at: new Date(),
+        error_details: error.message
+      });
+      throw error?.response?.data || error;
+    }
+  }
 
     /**
      * Process pre/post hooks
      * @param {object[]} hooks - Array of hook definitions
      * @param {object} context - Execution context
      */
-    async processHooks(hooks, context) {
+     async processHooks(hooks, context) {
+  for (const hook of hooks) {
+    if (!hook.template) continue;
+
+    const hookTemplate = await findActionTemplateByName(hook.template);
+    if (!hookTemplate) continue;
+
+    // Check hook conditions
+    if (hook.conditions && !this.evaluateConditions(hook.conditions, context.params)) {
+      console.log(`[ActionEngine] Skipping hook ${hook.template} (conditions not met)`);
+      continue;
+    }
+
+    try {
+      const hookParams = await expressionEvaluator.evaluatePlaceholders(
+        hook.parameters || {},
+        context
+      );
+
+      const hookResult = await this.executeAction(hookTemplate, {
+        ...context,
+        params: { ...context.params, ...hookParams }
+      });
+
+      // Apply output mapping
+      let output = hook.output_as || hookTemplate?.output_as || hook.template;
+      if (hook.output_template && Object.keys(hook.output_template).length !=  0) {
+        const mappedOutput = await expressionEvaluator.evaluatePlaceholders(
+          hook.output_template,
+          { ...context, outputs: { ...context.outputs, [output]: hookResult }, result: hookResult }
+        );
+        context.outputs[output] = mappedOutput;
+      } else {
+        context.outputs[output] = hookResult;
+      }
+    } catch (err) {
+      console.error(`[ActionEngine] Hook ${hook.template} failed`, err);
+      if (hook.fatal) {
+        throw new Error(`Fatal hook failure: ${hook.template}`);
+      }
+      // otherwise, just log and continue
+    }
+  }
+}
+     
+     
+ /*    async processHooks(hooks, context) {
         for (const hook of hooks) {
             let name = hook.template
 
@@ -136,7 +179,7 @@ export class ActionEngine {
             // Store hook output
             context.outputs[output] = hookResult;
         }
-    }
+    } */
 
     /**
      * Execute a single action
@@ -144,51 +187,97 @@ export class ActionEngine {
      * @param {object} context - Execution context
      * @returns {Promise<object>} Action result
      */
-    async executeAction(temp, context) {
-        const template = temp;
-        // Resolve field mappings in config
-        console.log(temp.id, 'EXECUTE', context, 'CONTEXT')
+    // async executeAction(temp, context) {
+    //     const template = temp;
+    //     // Resolve field mappings in config
 
-        const resolvedConfigs = await expressionEvaluator.evaluatePlaceholders(
-            template.config,
-            context
-        );
-        // console.log('EXECUTE CONFIG', JSON.stringify(resolvedConfigs), JSON.stringify(temp.config), context)
+    //     const resolvedConfigs = await expressionEvaluator.evaluatePlaceholders(
+    //         template.config,
+    //         context
+    //     );
 
 
-        // Evaluate conditions
-        if (template.conditions && !this.evaluateConditions(template.conditions, context.params)) {
-            return { status: 'skipped', reason: 'conditions_not_met' };
-        }
+    //     // Evaluate conditions
+    //     if (template.conditions && !this.evaluateConditions(template.conditions, context.params)) {
+    //         return { status: 'skipped', reason: 'conditions_not_met' };
+    //     }
 
 
-        // console.log(resolvedConfigs, context, resolvePlaceholders(template.config, context), 'RESOLVE PLACE HOLDERS', evaluateStringExpression(JSON.stringify(template.config), context))
+    //     // console.log(resolvedConfigs, context, resolvePlaceholders(template.config, context), 'RESOLVE PLACE HOLDERS', evaluateStringExpression(JSON.stringify(template.config), context))
 
 
-        // Execute based on tool type
-        switch (template.tool_type) {
-            case 'SMS':
-                return sendSMS({ ...template.config, ...resolvedConfigs, ...context.params });
-            case 'EMAIL':
-                return sendEmail(resolvedConfigs);
-            case 'API_CALL':
-                return this.callAPI(resolvedConfigs);
-            case 'AI_ACTION':
-                return this.callAI(resolvedConfigs, context);
-            case 'DB_OPERATION':
-                let dbResult = await this.dbOperation(resolvedConfigs, context);
-                console.log(dbResult, 'DB RESULT')
-                return dbResult
-            case 'COMPOSITE':
-                return this.executeComposite(resolvedConfigs, context);
-            case 'SCRIPT':
-                return this.executeScript(resolvedConfigs, context);
-            case 'SPEAK':
-                return sendSpeak(resolvedConfigs, context);
-            default:
-                throw new Error(`Unsupported tool type: ${template.tool_type}`);
-        }
+    //     // Execute based on tool type
+    //     switch (template.tool_type) {
+    //         case 'SMS':
+    //             return sendSMS({ ...template.config, ...resolvedConfigs, ...context.params });
+    //         case 'EMAIL':
+    //             return sendEmail(resolvedConfigs);
+    //         case 'API_CALL':
+    //             return this.callAPI(resolvedConfigs);
+    //         case 'AI_ACTION':
+    //             return this.callAI(resolvedConfigs, context);
+    //         case 'DB_OPERATION':
+    //             let dbResult = await this.dbOperation(resolvedConfigs, context);
+    //             return dbResult
+    //         case 'COMPOSITE':
+    //             return this.executeComposite(resolvedConfigs, context);
+    //         case 'SCRIPT':
+    //             return this.executeScript(resolvedConfigs, context);
+    //         case 'SPEAK':
+    //             return sendSpeak(resolvedConfigs, context);
+    //         default:
+    //             throw new Error(`Unsupported tool type: ${template.tool_type}`);
+    //     }
+    // }
+    
+    
+      async executeAction(template, context) {
+    const resolvedConfigs = await expressionEvaluator.evaluatePlaceholders(
+      template.config,
+      context
+    );
+
+
+
+
+    if (template.conditions && !this.evaluateConditions(template.conditions, context.params)) {
+      return { status: 'skipped', reason: 'conditions_not_met' };
     }
+
+    let result;
+    switch (template.tool_type) {
+      case 'SMS':
+        result = await sendSMS({ ...resolvedConfigs, ...context.params });
+        break;
+      case 'EMAIL':
+        result = await sendEmail(resolvedConfigs);
+        break;
+      case 'API_CALL':
+        result = await this.callAPI(resolvedConfigs, context);
+        break;
+      case 'AI_ACTION':
+        result = await this.callAI(resolvedConfigs, context);
+        break;
+      case 'DB_OPERATION':
+        result = await this.dbOperation(resolvedConfigs, context);
+        break;
+      case 'COMPOSITE':
+        result = await this.executeComposite(resolvedConfigs, context);
+        break;
+      case 'SCRIPT':
+        result = await this.executeScript(resolvedConfigs, context);
+        break;
+      case 'SPEAK':
+        result = await sendSpeak(resolvedConfigs, context);
+        break;
+      default:
+        throw new Error(`Unsupported tool type: ${template.tool_type}`);
+    }
+
+
+
+    return result;
+  }
 
     /**
      * Evaluate action conditions
@@ -251,19 +340,20 @@ export class ActionEngine {
         return { status: 'sent', to: config.to, messageId: `email_${Date.now()}` };
     }
 
-    async callAPI(config) {
+    async callAPI(config, context) {
+    const { tenant_id } = context;
         try {
             const { method, url, headers, body } = config;
-            console.log('CALL API', config)
             const response = await axios({
                 method: method || 'GET',
                 url,
                 data: body,
-                headers
+                headers: {
+                    ...headers, "tenant_id": tenant_id
+                }
             });
 
 
-            console.log('CALL API RESPONSE', response.data, 'config', config)
             return response.data
         } catch (err) {
             console.log('API ERROR', err.response)
@@ -274,21 +364,15 @@ export class ActionEngine {
 
     async callAI(config, context) {
         const { conversation_id, message, model_name, system_prompt, temperature, num_ctx, top_p } = config;
-        console.log(config, 'AI CONFIGGG', context)
-        let session = await sessionManager.getSession(conversation_id);
+            let session = await contextManager.getSession(conversation_id || context.conversation_id);
+
         let newMessage = expressionEvaluator.evaluatePlaceholders(message, context)
 
 
         try {
 
-            if (!session) {
-                console.log('[Session] Creating new session');
-                session = await sessionManager.createSession(conversation_id);
-
-            } else {
-                console.log(`[Session] Using existing session: ${session.id}`);
-            }
-
+ 
+       await contextManager.addMessage(session.id, 'user', message);
 
 
             /*      const response = await axios({
@@ -297,23 +381,37 @@ export class ActionEngine {
                      headers,
                      data: body
                  }); */
-
-            console.log(config, context, 'AI CALL')
-
-
-            const agent = new AIAgent(model_name ? model_name : `alayon_model_${context.tenant_id}`, session.conversation_id);
-
-
-
-            await agent.initialize(context);
-
-            console.log('[MESSAGE] Processing user input...', newMessage);
-            const response = await agent.generate(newMessage, { temperature, num_ctx, top_p });
+console.log(newMessage, 'CALL AI', model_name ? model_name : `alayon_model_${context.tenant_id}`)
 
 
 
 
-            console.log(config, context, 'AI AGENT RESPONSE', response)
+const ai = await new AIService(session.id, model_name ? model_name : `alayon_model_${context.tenant_id}`).init();
+
+
+
+
+const response = await ai.query(newMessage, {
+      systemInstructions: system_prompt,
+      context: {...session.context, ...context},
+      history: session.history,
+    });
+
+
+       await contextManager.addMessage(session.id, 'assistant', response);
+
+            // const agent = new AIAgent(model_name ? model_name : `alayon_model_${context.tenant_id}`, session.conversation_id);
+
+
+
+            // await agent.initialize(context);
+
+            // console.log('[MESSAGE] Processing user input...', newMessage);
+            // const response = await agent.generate(newMessage, { temperature, num_ctx, top_p });
+
+
+
+
             return response
         } catch (err) {
             console.log('AI ERROR', err)
@@ -326,9 +424,7 @@ export class ActionEngine {
         const { model, operation, query, data } = config;
         const { tenant_id } = context
         // In a real implementation, this would reference Sequelize models
-
-        console.log(config, 'DB OPERATION')
-
+console.log(config, tenant_id, 'DB CONTEXT')
         switch (operation) {
             case 'delete':
                 return db[model].destroy(query);
@@ -339,6 +435,7 @@ export class ActionEngine {
             case 'find':
                 return db[model].findAll({ ...query, raw: true });
             case 'read':
+            console.log()
                 return db[model].findAll({ ...query, raw: true });
             default:
                 throw new Error(`Unsupported DB operation: ${operation}`);
@@ -346,25 +443,12 @@ export class ActionEngine {
     }
 
     async executeComposite(config, context) {
-        const results = {};
-        for (const action of config.actions) {
-            const template = await db.ActionTemplate.findByPk(action.templateId);
-            const params = expressionEvaluator.resolveFieldMappings(
-                action.parameters || {},
+            const result = expressionEvaluator.resolvePlaceholders(
+                config || {},
                 context
             );
 
-
-            results[action.as] = await this.executeAction(template, {
-                ...context,
-                params: { ...context.params, ...params }
-            });
-
-
-            // Update context with sub-action result
-            context.outputs[action.as] = results[action.as];
-        }
-        return results;
+        return result;
     }
 
     executeScript(config, context) {
@@ -373,37 +457,7 @@ export class ActionEngine {
         return { output: "Script executed" };
     }
 
-    textToSpeech(config) {
-        console.log(`Converting to speech: ${config.text}`);
-        return { audioUrl: `https://example.com/audio/${Date.now()}.mp3` };
-    }
 
-    // resolveParameters(config, context) {
-    //     // Deep clone config to avoid mutation
-    //     const resolved = JSON.parse(JSON.stringify(config));
-
-    //     // Recursive resolution function
-    //     const resolve = (obj) => {
-    //         for (const key in obj) {
-    //             if (typeof obj[key] === 'string' && obj[key].startsWith('=')) {
-    //                 // Evaluate expression in sandbox
-    //                 const expression = obj[key].substring(1);
-    //                 try {
-    //                     const sandbox = { ...context, ...context.params };
-    //                     vm.createContext(sandbox);
-    //                     obj[key] = vm.runInContext(expression, sandbox);
-    //                 } catch (error) {
-    //                     throw new Error(`Expression evaluation failed: ${expression} - ${error.message}`);
-    //                 }
-    //             } else if (typeof obj[key] === 'object') {
-    //                 resolve(obj[key]);
-    //             }
-    //         }
-    //     };
-
-    //     resolve(resolved);
-    //     return resolved;
-    // }
 
 
 }

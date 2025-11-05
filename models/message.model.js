@@ -5,8 +5,12 @@ export default ({ sequelize }, DataTypes) => {
             primaryKey: true,
             autoIncrement: true
         },
-        treadId: {
+        tread_id: {
             type: DataTypes.STRING,
+            allowNull: true,
+        },
+        conversation_id: {
+            type: DataTypes.INTEGER,
             allowNull: true,
         },
         role: {
@@ -36,19 +40,21 @@ export default ({ sequelize }, DataTypes) => {
         },
         created_at: {
             type: DataTypes.DATE,
-            allowNull: false,
             defaultValue: DataTypes.NOW
+        },
+        updated_at: {
+            type: DataTypes.DATE,
+                defaultValue: DataTypes.NOW
         }
     }, {
         tableName: 'messages',
         timestamps: false,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
         underscored: true,
         indexes: [
             {
                 fields: ['role']
-            },
-            {
-                fields: ['created_at']
             }
         ]
     });
