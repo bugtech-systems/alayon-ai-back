@@ -12,9 +12,17 @@ import actionTemplateRoutes from "./routes/actionTemplate.routes.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import { validateTenantId } from "../middleware/tenantMiddleware.js";
 
+// Enhanced CORS configuration
+const corsOptions = {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'tenant_id'],
+    credentials: true
+};
+
 const app = express();
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(validateTenantId); // Global
