@@ -357,7 +357,7 @@ export class AIService {
     // Generate appropriate response
     let response;
       // Use AI model for response generation
-      const history = this.session.chats.filter(m => m.model == this.model.id).slice(0, 2);
+      const history = this.session.chats.filter(m => m.model == this.model.id).slice(0, 4);
       const conversationHistory = history.map((m) => `${m.role.toUpperCase()}: ${m.message}`).join("\n");
       
           const systemInstructions = await expressionEvaluator.resolvePlaceholders(
@@ -384,7 +384,6 @@ IMPORTANT: Continue the conversation naturally from the current step. Do not rep
 
 
 
-console.log(history, 'CONV HISTORY')
 
       const prompt = buildPrompt(
         message, 
@@ -407,7 +406,6 @@ console.log(history, 'CONV HISTORY')
       
       
       
-      console.log(prompt, 'PROMPT', this.options)
 
       const aiResponse = await this.ollama.generate(this.model.model_name, prompt, this.options);
       response = aiResponse.response;

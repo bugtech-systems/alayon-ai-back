@@ -26,7 +26,7 @@ export const validateTenantId = async  (req, res, next) => {
     //         error: 'tenant_id must be a positive integer'
     //     });
     // }
-        console.log(req.sessionId, 'Initial sessionId')
+        console.log(sessionId, 'Initial sessionId', req.headers)
 
     let parsedId = null;
     if (tenantId && tenantId != 'undefined') {

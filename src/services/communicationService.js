@@ -15,7 +15,6 @@ export async function sendSMS(config, context) {
     
     
     
-    
     if (recipients.length) {
         recipients = recipients.map(a => String(a))
         let isSMS = message_types?.includes('SMS');

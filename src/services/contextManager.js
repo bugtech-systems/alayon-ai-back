@@ -25,7 +25,7 @@ class ContextManager {
     setInterval(() => {
       console.log(`[Session Cleanup] ${new Date().toISOString()}`);
       this.clearAllSessions();
-    }, 60 * 60 * 1000);
+    }, 15 * 60 * 1000);
   }
 
   async clearAllSessions() {

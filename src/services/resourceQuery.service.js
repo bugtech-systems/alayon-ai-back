@@ -138,7 +138,6 @@ class ResourceQueryService {
       ].filter(Boolean);
 
 
-    console.log(whereConditions, 'WHERE COND', baseConditions, input)
 
       const where = whereConditions.length > 1 ? and(...whereConditions) : whereConditions[0];
 

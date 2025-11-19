@@ -172,11 +172,9 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const processedQuery = validateAndProcessQuery(req.query);
-    console.log(processedQuery, 'PROCESSED', req.query)
     const result = await resourceQueryService.getResources(processedQuery);
 
 
-  console.log(result, 'RESUULT')
     const formattedData = result.data.map(formatResourceResponse);
 
     return res.status(200).json({
