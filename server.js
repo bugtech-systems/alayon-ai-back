@@ -35,26 +35,12 @@ const __dirname = dirname(__filename);
 
 
 // Path to your election data JSON file
-const DATA_PATH = path.join(__dirname, 'uploads', 'SAN_ISIDRO.json');
 
 // Helper function to apply filters
 // Helper function to apply filters
 // Enhanced filter matching with range support
 
 
-
-// Read and cache election data
-let electionData = [];
-try {
-
-    const rawData = fs.readFileSync(DATA_PATH);
-    electionData = JSON.parse(rawData);
-    if (!Array.isArray(electionData)) electionData = [electionData];
-    console.log(`Loaded ${electionData.length} location records`);
-} catch (error) {
-    console.error('Error loading election data:', error);
-    process.exit(1);
-}
 
 
 // const app = express();
