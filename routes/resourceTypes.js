@@ -13,7 +13,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /api/v1/resource-types:
+ * /apiv1/v1/resource-types:
  *   post:
  *     summary: Create a new resource type
  *     tags: [ResourceTypes]
@@ -112,7 +112,7 @@ router.post('/', async (req, res) => {
 
 /**
  * @swagger
- * /api/v1/resource-types:
+ * /apiv1/v1/resource-types:
  *   get:
  *     summary: Get all resource types
  *     tags: [ResourceTypes]
@@ -158,7 +158,7 @@ router.get('/', async (req, res, next) => {
 
 /**
  * @swagger
- * /api/v1/resource-types/{id}:
+ * /apiv1/v1/resource-types/{id}:
  *   get:
  *     summary: Get a resource type by ID
  *     tags: [ResourceTypes]
@@ -236,7 +236,7 @@ router.get('/:identifier', async (req, res, next) => {
 
 /**
  * @swagger
- * /api/v1/resource-types/{id}:
+ * /apiv1/v1/resource-types/{id}:
  *   put:
  *     summary: Update a resource type
  *     tags: [ResourceTypes]
@@ -342,7 +342,7 @@ router.put('/:id', async (req, res, next) => {
 
 /**
  * @swagger
- * /api/v1/resource-types/{id}:
+ * /apiv1/v1/resource-types/{id}:
  *   delete:
  *     summary: Delete a resource type
  *     tags: [ResourceTypes]

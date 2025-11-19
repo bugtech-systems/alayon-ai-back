@@ -12,7 +12,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /api/v1/relationships:
+ * /apiv1/v1/relationships:
  *   post:
  *     summary: Create a relationship between resources
  *     tags: [Relationships]
@@ -82,7 +82,7 @@ router.post('/', async (req, res, next) => {
 
 /**
  * @swagger
- * /api/v1/relationships/{resourceId}:
+ * /apiv1/v1/relationships/{resourceId}:
  *   get:
  *     summary: Get relationships for a resource
  *     tags: [Relationships]
@@ -137,7 +137,7 @@ router.get('/:resourceId', async (req, res, next) => {
 
 /**
  * @swagger
- * /api/v1/relationships/{id}:
+ * /apiv1/v1/relationships/{id}:
  *   delete:
  *     summary: Delete a relationship
  *     tags: [Relationships]

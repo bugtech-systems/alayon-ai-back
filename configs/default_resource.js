@@ -141,7 +141,7 @@ export const action_templates = [
         "description": "Find single resource config or resource setup with type config.",
         "output_as": "config",
         "config": {
-            "url": "http://localhost:3300/api/v1/resource-types/{{params.resource_name}}",
+            "url": "http://localhost:3300/apiv1/v1/resource-types/{{params.resource_name}}",
             "method": "GET",
         },
         "parameters": [
@@ -158,7 +158,7 @@ export const action_templates = [
         "description": "Find all resources record in collection.",
         "output_as": "{{params.resource_name}}",
         "config": {
-            "url": "http://localhost:3300/api/v1/resources/type/{{params.resource_name}}",
+            "url": "http://localhost:3300/apiv1/v1/resources/type/{{params.resource_name}}",
             "method": "GET",
         },
         "parameters": [
@@ -175,7 +175,7 @@ export const action_templates = [
         "description": "Setup new resource type config or create new resource collection.",
         "output_as": "config",
         "config": {
-            "url": "http://localhost:3300/api/v1/resource-types",
+            "url": "http://localhost:3300/apiv1/v1/resource-types",
             "method": "POST",
             "body": {
                 "resource_name": "{{params.resource_name}}",

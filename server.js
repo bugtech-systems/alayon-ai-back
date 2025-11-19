@@ -47,7 +47,7 @@ const __dirname = dirname(__filename);
 
 
 const port = process.env.PORT || 3300;
-const staticUrl = process.env.API_STATIC_URL || 'http://localhost:3300/api/v1/static';
+const staticUrl = process.env.API_STATIC_URL || 'http://localhost:3300/apiv2/v1/static';
 
 // Enhanced CORS configuration
 const corsOptions = {
@@ -67,10 +67,10 @@ app.use(validateTenantId); // Global
 
 
 
-app.use('/config', express.static('config'));
-app.use('/api/v1/static', express.static(path.join(__dirname, 'uploads')))
+app.use('/apiv1/config', express.static('config'));
+app.use('/apiv1/v1/static', express.static(path.join(__dirname, 'uploads')))
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use("/apiv1/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 
 const uploadDir = path.join(__dirname, "uploads");
@@ -100,7 +100,7 @@ const upload = multer({ storage });
 
 
 
-app.use('/api-docs',
+app.use('/apiv1/api-docs',
     swaggerUi.serve,
     swaggerUi.setup(swaggerSpec, {
         explorer: true,
@@ -127,22 +127,22 @@ const syncDatabase = async () => {
 };
 
 // Routes
-app.use('/api/v1/resource-types', resourceTypesRouter);
-app.use('/api/v1/resources', resourcesRouter);
-app.use('/api/v1/relationships', relationshipsRouter);
-app.use('/api/v1/action-templates', actionTemplatesRouter);
-app.use('/api/v1/action-triggers', actionTriggerRouter);
-app.use('/api/v1/result-references', resultReferencesRouter);
-app.use('/api/v1/chat', chatRouter);
-// app.use('/api/v1/tuner', fineTuneRouter);
-app.use('/api/v1/audit-logs', auditLogRouter);
-app.use('/api/v1/ai-presets', aiPresetRouter);
+app.use('/apiv1/v1/resource-types', resourceTypesRouter);
+app.use('/apiv1/v1/resources', resourcesRouter);
+app.use('/apiv1/v1/relationships', relationshipsRouter);
+app.use('/apiv1/v1/action-templates', actionTemplatesRouter);
+app.use('/apiv1/v1/action-triggers', actionTriggerRouter);
+app.use('/apiv1/v1/result-references', resultReferencesRouter);
+app.use('/apiv1/v1/chat', chatRouter);
+// app.use('/apiv1/v1/tuner', fineTuneRouter);
+app.use('/apiv1/v1/audit-logs', auditLogRouter);
+app.use('/apiv1/v1/ai-presets', aiPresetRouter);
 
 
 
 
 
-app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
+app.post('/apiv1/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -180,7 +180,7 @@ app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
     }
 });
 
-app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
+app.post('/apiv1/v1/upload', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -197,7 +197,7 @@ app.post('/api/v1/upload', upload.single('file'), async (req, res) => {
     }
 });
 
-app.post('/api/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
+app.post('/apiv1/v1/transcribe-mp3', upload.single('audio'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -374,7 +374,7 @@ const matchesFilter = (candidate, contestObj, location, filter = {}) => {
 // Get distinct values for filtering// Get distinct values with filtering
 
 // Endpoint with filtering, grouping, and summing
-app.post('/api/v1/group-values', (req, res) => {
+app.post('/apiv1/v1/group-values', (req, res) => {
 
     const { fieldToGroup, filter = {}, sumField, selectFields = [], excludeFields = [] } = req.body;
 
@@ -479,7 +479,7 @@ app.post('/api/v1/group-values', (req, res) => {
 // };
 // // New endpoint for distinct values
 // // Enhanced distinct values endpoint
-// app.post('/api/v1/distinct-values', (req, res) => {
+// app.post('/apiv1/v1/distinct-values', (req, res) => {
 //     try {
 //         const { fields, filter = {} } = req.body;
 
@@ -586,7 +586,7 @@ const getDistinctValues = (fields, filter = {}, groupedFields = []) => {
 };
 
 // API endpoint
-app.post('/api/v1/distinct-values', (req, res) => {
+app.post('/apiv1/v1/distinct-values', (req, res) => {
     try {
         const { fields, filter = {}, groupedFields = [] } = req.body;
 
