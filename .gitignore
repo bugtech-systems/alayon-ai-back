@@ -25,6 +25,8 @@ session_logs/*
 *.sln
 *.sw?
 
+
+.env
 venv
 tuner
 uploads

@@ -2,7 +2,7 @@
 import { Ollama } from 'ollama';
 import { findActionTemplateByName, getFieldsForResource, getResourcesByType, getResourceTypes } from "./ResourceService.js";
 import { db } from '../models/index.js';
-import { AIAgent } from '../tuner/app/ai-agent.js';
+import { AIAgent } from '../services/aiAgent.js';
 
 // Initialize Ollama client with your server configuration
 const ollama = new Ollama({
