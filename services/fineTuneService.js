@@ -2,7 +2,6 @@ import axios from 'axios';
 import { db } from '../models/index.js';
 import ollama from 'ollama';
 import { Op } from 'sequelize';
-import { systemPrompt } from '../helpers/system-prompt.js';
 import { FineTuner } from '../tuner/app/fine-tuner.js';
 
 // Get directory name in ESM

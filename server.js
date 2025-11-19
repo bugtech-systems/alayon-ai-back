@@ -9,7 +9,7 @@ import relationshipsRouter from './routes/relationships.js';
 import actionTemplatesRouter from './routes/actionTemplates.js';
 import resultReferencesRouter from './routes/resultReferences.js';
 import chatRouter from './routes/chat.js';
-import fineTuneRouter from './routes/trainModels.js';
+// import fineTuneRouter from './routes/trainModels.js';
 import actionTriggerRouter from './routes/actionTrigger.js';
 import auditLogRouter from './routes/auditRoutes.js';
 import aiPresetRouter from './routes/aiPreset.js';
@@ -148,7 +148,7 @@ app.use('/api/v1/action-templates', actionTemplatesRouter);
 app.use('/api/v1/action-triggers', actionTriggerRouter);
 app.use('/api/v1/result-references', resultReferencesRouter);
 app.use('/api/v1/chat', chatRouter);
-app.use('/api/v1/tuner', fineTuneRouter);
+// app.use('/api/v1/tuner', fineTuneRouter);
 app.use('/api/v1/audit-logs', auditLogRouter);
 app.use('/api/v1/ai-presets', aiPresetRouter);
 
