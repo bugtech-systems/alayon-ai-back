@@ -103,7 +103,7 @@ router.put("/:id", async (req, res) => {
     await withTransaction(async (trx) => {
       const [updated] = await trx
         .update(aiPresets)
-        .set({ ...req.body, updated_at: new Date() })
+        .set({ ...req.body, created_at: new Date(), updated_at: new Date() })
         .where(eq(aiPresets.id, Number(req.params.id)))
         .returning();
 

@@ -376,9 +376,6 @@ IMPORTANT INSTRUCTIONS: ${options.systemInstructions}
 systemInstructions
 }
 
-Current Flow: ${this.session.context.last_scenario}
-Context: ${JSON.stringify(this.session.context.parameters, null, 2)}
-
 IMPORTANT: Continue the conversation naturally from the current step. Do not repeat previous questions.
 `;
 

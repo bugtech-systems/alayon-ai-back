@@ -16,7 +16,7 @@ const sequelize = new Sequelize(
             operatorsAliases: Sequelize.Op
         },
          dialectOptions: {
-                    ssl: { require: true, rejectUnauthorized: false }
+                    // ssl: { require: false, rejectUnauthorized: false }
         }
     }
 );
