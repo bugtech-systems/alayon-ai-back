@@ -16,7 +16,7 @@ import { validateTenantId } from "../middleware/tenantMiddleware.js";
 const corsOptions = {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'tenant_id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'tenant_id', 'session_id'],
     credentials: true
 };
 
