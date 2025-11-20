@@ -263,6 +263,24 @@ router.get("/:name", async (req, res) => {
 // ✅ Update
 router.put("/:id", async (req, res) => {
   try {
+  
+    const template = await findActionTemplateByName(req.params.name, req.tenantId);
+  
+    if (!template)  {
+       const [template] = await db
+      .insert(actionTemplates)
+      .values({
+        ...req.body,
+        id: Number(req.params.id),
+        tenant_id: req.tenantId || null,
+        created_at: new Date(req.body.created_at || null),
+        updated_at: new Date()
+      })
+      .returning();
+    } 
+
+  
+  
     const [updated] = await db
       .update(actionTemplates)
       .set({
