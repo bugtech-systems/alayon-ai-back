@@ -264,7 +264,9 @@ router.get("/:name", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
   
-    const template = await findActionTemplateByName(req.params.name, req.tenantId);
+    const template = await findActionTemplateByName(Number(req.params.id), req.tenantId);
+  
+  console.log(template, 'TEMPLATE')
   
     if (!template)  {
        const [template] = await db
